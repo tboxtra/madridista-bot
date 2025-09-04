@@ -33,7 +33,7 @@ def _dig(d, *path):
         cur = cur[k]
     return cur
 
-def _minute_tuple(inc_time: dict) -> tuple[int, int]:
+def _minute_tuple(inc_time: dict):
     if not inc_time: return (0, 0)
     m = inc_time.get("minute")
     ex = inc_time.get("extra") or 0
@@ -85,7 +85,7 @@ class SofaScoreProvider:
                 return _map_event(e)
         return None
 
-    def get_event_incidents(self, event_id: str | int) -> List[Dict[str, Any]]:
+    def get_event_incidents(self, event_id) -> List[Dict[str, Any]]:
         data = _get_json(f"/event/{event_id}/incidents")
         info = _get_json(f"/event/{event_id}")
         e = info.get("event", {}) if isinstance(info, dict) else {}

@@ -34,7 +34,7 @@ async def monitor_tick(context):
 
 async def _impl(context):
     bot = context.application.bot
-    subs: set[int] = context.application.bot_data.get("subs", set())
+    subs = context.application.bot_data.get("subs", set())
     if not subs: return
 
     ev = PROV.get_team_live_event()
