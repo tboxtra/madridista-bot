@@ -1,10 +1,16 @@
 import os
 import logging
+import random
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from ai_engine.gpt_engine import generate_short_post
-from prompts.fan_prompts import PROMPTS
-import random
+
+# Import our new football services
+from services.football_api import FootballAPIService
+from data.football_knowledge import (
+    get_player_info, get_competition_info, get_recent_achievements,
+    get_banter_responses, REAL_MADRID_FACTS, LA_LIGA_TEAMS_2024
+)
 
 # Enable logging
 logging.basicConfig(
@@ -23,6 +29,9 @@ class MadridistaTelegramBot:
         if self.token == "your_bot_token_here" or len(self.token) < 40 or not any(c.isdigit() for c in self.token):
             raise ValueError("TELEGRAM_BOT_TOKEN appears to be a placeholder. Please set a real bot token from @BotFather")
         
+        # Initialize football API service
+        self.football_api = FootballAPIService()
+        
         self.application = Application.builder().token(self.token).build()
         self.setup_handlers()
     
@@ -33,6 +42,10 @@ class MadridistaTelegramBot:
         self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(CommandHandler("tweet", self.generate_tweet_command))
         self.application.add_handler(CommandHandler("madrid", self.madrid_command))
+        self.application.add_handler(CommandHandler("squad", self.squad_command))
+        self.application.add_handler(CommandHandler("matches", self.matches_command))
+        self.application.add_handler(CommandHandler("standings", self.standings_command))
+        self.application.add_handler(CommandHandler("achievements", self.achievements_command))
         
         # Message handler for general conversation
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
@@ -45,6 +58,10 @@ class MadridistaTelegramBot:
             "Available commands:\n"
             "/tweet - Generate a Real Madrid tweet\n"
             "/madrid - Get Real Madrid info\n"
+            "/squad - Current squad information\n"
+            "/matches - Recent and upcoming matches\n"
+            "/standings - La Liga standings\n"
+            "/achievements - Recent achievements\n"
             "/help - Show this help message\n\n"
             "Just chat with me about Real Madrid! Ask me anything about the club, players, history, or current events."
         )
@@ -57,6 +74,10 @@ class MadridistaTelegramBot:
             "/start - Start the bot\n"
             "/tweet - Generate a Real Madrid tweet\n"
             "/madrid - Get Real Madrid info\n"
+            "/squad - Current squad information\n"
+            "/matches - Recent and upcoming matches\n"
+            "/standings - La Liga standings\n"
+            "/achievements - Recent achievements\n"
             "/help - Show this help message\n\n"
             "You can also just chat with me about Real Madrid!"
         )
@@ -68,7 +89,7 @@ class MadridistaTelegramBot:
             await update.message.reply_text("Generating your Real Madrid tweet... ⚽")
             
             # Generate tweet using existing AI engine
-            prompt = random.choice(PROMPTS)
+            prompt = "Generate an exciting Real Madrid tweet about the club's success, players, or upcoming matches"
             tweet_text = generate_short_post(prompt, max_chars=240)
             
             # Ensure it fits in a tweet
@@ -83,15 +104,123 @@ class MadridistaTelegramBot:
     
     async def madrid_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /madrid command - provide Real Madrid info"""
-        madrid_info = (
-            "🏆 Real Madrid Club de Fútbol 🏆\n\n"
-            "Founded: 1902\n"
-            "Stadium: Santiago Bernabéu\n"
-            "League: La Liga\n"
-            "European Cups: 14 (record)\n\n"
-            "¡Hala Madrid y nada más! 🤍"
-        )
-        await update.message.reply_text(madrid_info)
+        try:
+            # Try to get live data first
+            club_info = await self.football_api.get_real_madrid_info()
+            
+            if club_info:
+                madrid_info = (
+                    f"🏆 **{club_info.get('name', 'Real Madrid')}** 🏆\n\n"
+                    f"Founded: {club_info.get('founded', 1902)}\n"
+                    f"Stadium: {club_info.get('venue', 'Santiago Bernabéu')}\n"
+                    f"Colors: {club_info.get('colors', 'White and Gold')}\n"
+                    f"League: La Liga\n"
+                    f"European Cups: {REAL_MADRID_FACTS['achievements']['champions_league']} (record)\n\n"
+                    f"¡Hala Madrid y nada más! 🤍"
+                )
+            else:
+                # Fallback to static data
+                madrid_info = (
+                    "🏆 **Real Madrid Club de Fútbol** 🏆\n\n"
+                    "Founded: 1902\n"
+                    "Stadium: Santiago Bernabéu\n"
+                    "League: La Liga\n"
+                    "European Cups: 14 (record)\n\n"
+                    "¡Hala Madrid y nada más! 🤍"
+                )
+            
+            await update.message.reply_text(madrid_info)
+            
+        except Exception as e:
+            logger.error(f"Error in madrid command: {e}")
+            await update.message.reply_text("¡Hala Madrid! 🤍")
+    
+    async def squad_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /squad command - show current squad"""
+        try:
+            await update.message.reply_text("Fetching current Real Madrid squad... ⚽")
+            
+            # Try to get live squad data
+            squad = await self.football_api.get_real_madrid_squad()
+            
+            if squad:
+                squad_text = "🤍 **Real Madrid Current Squad** 🤍\n\n"
+                
+                # Group by position
+                positions = {}
+                for player in squad:
+                    pos = player.get('position', 'Unknown')
+                    if pos not in positions:
+                        positions[pos] = []
+                    positions[pos].append(player.get('name', 'Unknown'))
+                
+                for pos, players in positions.items():
+                    squad_text += f"**{pos}:**\n"
+                    for player in players:
+                        squad_text += f"• {player}\n"
+                    squad_text += "\n"
+                
+                await update.message.reply_text(squad_text)
+            else:
+                # Fallback to static data
+                squad_text = "🤍 **Real Madrid Current Squad 2024** 🤍\n\n"
+                for position, players in REAL_MADRID_FACTS["current_squad_2024"].items():
+                    squad_text += f"**{position.title()}:**\n"
+                    for player in players:
+                        squad_text += f"• {player}\n"
+                    squad_text += "\n"
+                
+                await update.message.reply_text(squad_text)
+                
+        except Exception as e:
+            logger.error(f"Error in squad command: {e}")
+            await update.message.reply_text("Sorry, couldn't fetch squad information right now!")
+    
+    async def matches_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /matches command - show recent and upcoming matches"""
+        try:
+            await update.message.reply_text("Fetching Real Madrid matches... ⚽")
+            
+            matches = await self.football_api.get_real_madrid_matches(limit=5)
+            
+            if matches:
+                matches_text = "⚽ **Real Madrid Recent & Upcoming Matches** ⚽\n\n"
+                for match in matches:
+                    matches_text += self.football_api.format_match_result(match) + "\n\n"
+                
+                await update.message.reply_text(matches_text)
+            else:
+                await update.message.reply_text("No recent match data available. Check back later!")
+                
+        except Exception as e:
+            logger.error(f"Error in matches command: {e}")
+            await update.message.reply_text("Sorry, couldn't fetch match information right now!")
+    
+    async def standings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /standings command - show La Liga standings"""
+        try:
+            await update.message.reply_text("Fetching La Liga standings... 🏆")
+            
+            standings = await self.football_api.get_la_liga_standings()
+            
+            if standings:
+                standings_text = self.football_api.format_standings(standings, limit=10)
+                await update.message.reply_text(standings_text)
+            else:
+                await update.message.reply_text("No standings data available. Check back later!")
+                
+        except Exception as e:
+            logger.error(f"Error in standings command: {e}")
+            await update.message.reply_text("Sorry, couldn't fetch standings right now!")
+    
+    async def achievements_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /achievements command - show recent achievements"""
+        try:
+            achievements_text = get_recent_achievements()
+            await update.message.reply_text(achievements_text)
+        except Exception as e:
+            logger.error(f"Error in achievements command: {e}")
+            await update.message.reply_text("¡Hala Madrid! 🤍")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle general messages about Real Madrid with intelligent responses"""
@@ -102,24 +231,57 @@ class MadridistaTelegramBot:
         
         if any(keyword in user_message for keyword in madrid_keywords):
             try:
-                # Create a context-aware prompt based on user's message
-                context_prompt = f"User asked: {update.message.text}\n\nGenerate a helpful, informative response about Real Madrid that directly addresses what they're asking. Keep it conversational and engaging."
+                # Check for specific player queries
+                if any(player in user_message for player in ['cr7', 'ronaldo', 'cristiano']):
+                    player_info = get_player_info("cristiano ronaldo")
+                    response = f"⚽ **{player_info['name']}** - {player_info['status']}\nYears at Madrid: {player_info['years']}\nAchievements: {player_info['achievements']}"
+                    await update.message.reply_text(response)
+                    return
                 
-                # Generate a relevant response using the user's actual question
+                elif any(player in user_message for player in ['vinicius', 'vini', 'vinícius']):
+                    player_info = get_player_info("vinicius junior")
+                    response = f"⚽ **{player_info['name']}** - {player_info['status']}\nPosition: {player_info['position']}\nTeam: {player_info['team']}"
+                    await update.message.reply_text(response)
+                    return
+                
+                # Check for competition queries
+                elif any(comp in user_message for comp in ['champions', 'ucl', 'europe']):
+                    comp_info = get_competition_info("champions league")
+                    response = f"🏆 **{comp_info['name']}**\nMadrid has won {comp_info['madrid_titles']} titles!\n{comp_info['history']['recent_performance']}"
+                    await update.message.reply_text(response)
+                    return
+                
+                elif any(comp in user_message for comp in ['liga', 'la liga', 'spanish league']):
+                    comp_info = get_competition_info("la liga")
+                    response = f"🏆 **{comp_info['name']}**\nMadrid has won {comp_info['madrid_titles']} titles!\n{comp_info['teams']} teams, {comp_info['matches']} matches per season"
+                    await update.message.reply_text(response)
+                    return
+                
+                # Check for banter opportunities
+                elif any(rival in user_message for rival in ['barcelona', 'barca', 'barça']):
+                    banter = get_banter_responses()["barcelona"]
+                    response = random.choice(banter)
+                    await update.message.reply_text(response)
+                    return
+                
+                elif any(rival in user_message for rival in ['atletico', 'atleti', 'atlético']):
+                    banter = get_banter_responses()["atletico"]
+                    response = random.choice(banter)
+                    await update.message.reply_text(response)
+                    return
+                
+                # Generate a relevant response using AI
+                context_prompt = f"User asked: {update.message.text}\n\nGenerate a helpful, informative response about Real Madrid that directly addresses what they're asking. Use accurate facts and be engaging."
+                
                 response = generate_short_post(context_prompt, max_chars=200)
-                
                 await update.message.reply_text(f"⚽ {response}")
+                
             except Exception as e:
                 logger.error(f"Error generating response: {e}")
-                # Fallback to a more specific response based on keywords
-                if 'cr7' in user_message or 'ronaldo' in user_message:
-                    await update.message.reply_text("⚽ Cristiano Ronaldo is a Real Madrid legend! He won 4 Champions League titles with us and scored 450+ goals. What would you like to know about CR7?")
-                elif 'vinicius' in user_message or 'vini' in user_message:
-                    await update.message.reply_text("⚽ Vinícius Jr. is our current superstar! He's been incredible this season with his pace and skill. What about Vini interests you?")
-                elif 'champions' in user_message:
-                    await update.message.reply_text("🏆 Real Madrid has won 14 Champions League titles - more than any other club! We're the kings of Europe! What would you like to know about our European success?")
-                else:
-                    await update.message.reply_text("¡Hala Madrid! 🤍 I'd love to help you with that Real Madrid question. Could you be more specific about what you'd like to know?")
+                # Fallback to banter
+                banter = get_banter_responses()["general"]
+                response = random.choice(banter)
+                await update.message.reply_text(response)
         else:
             # For non-Madrid topics, guide them to Real Madrid conversation
             await update.message.reply_text("¡Hala Madrid! ⚽🤍 I'm your Real Madrid companion! Let's talk about the greatest club in the world. Ask me about players, history, matches, or anything Real Madrid related!")
