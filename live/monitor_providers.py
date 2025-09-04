@@ -1,78 +1,76 @@
+from asyncio import Lock
 import os
-from typing import Optional, Dict, Any, Union
+from typing import Optional
+from utils.formatting import md_escape
+from utils.freshness import is_fresh, source_stamp
+from utils.timeutil import now_utc
 from utils.dedupe import DeDupe
 
 PROVIDER_NAME = os.getenv("LIVE_PROVIDER", "sofascore").lower()
 POLL_SECONDS = int(os.getenv("POLL_SECONDS", "25"))
 
-# Lazy import based on env
 if PROVIDER_NAME == "sofascore":
-    from providers.sofascore import SofaScoreProvider as Provider
-elif PROVIDER_NAME == "livescore":
-    from providers.livescore_rapid import LiveScoreProvider as Provider  # you add this when ready
+    from providers.sofascore import SofaScoreProvider as Provider, minute_display
 else:
-    from providers.sofascore import SofaScoreProvider as Provider
+    from providers.sofascore import SofaScoreProvider as Provider, minute_display
+
+JOB_LOCK = Lock()
+PROV = Provider()
 
 class LiveState:
     def __init__(self):
-        self.event_id = None
-        self.homeScore = None
-        self.awayScore = None
-        self.dedupe = DeDupe(maxlen=400)  # remember recent incidents
+        self.event_id: Optional[str] = None
+        self.homeScore: Optional[int] = None
+        self.awayScore: Optional[int] = None
+        self.last_scoreline: Optional[str] = None
+        self.dedupe = DeDupe(maxlen=400)
 
 STATE = LiveState()
-PROV = Provider()
-
-def _team_tag(team):
-    return "🤍" if team == "home" else ("💙" if team == "away" else "")
-
-def _format_incident_line(inc):
-    minute = f"{inc['minute']}' " if inc.get("minute") is not None else ""
-    tag = _team_tag(inc.get("team"))
-    return f"{minute}{tag} {inc['text']}".strip()
 
 async def monitor_tick(context):
+    if JOB_LOCK.locked(): return
+    async with JOB_LOCK:
+        await _impl(context)
+
+async def _impl(context):
     bot = context.application.bot
-    subs: set = context.application.bot_data.get("subs", set())
-    if not subs:
-        return
+    subs: set[int] = context.application.bot_data.get("subs", set())
+    if not subs: return
 
-    # 1) Is there a live event for our team?
     ev = PROV.get_team_live_event()
+    pulled_at = now_utc()
+    context.application.bot_data["LIVE_LAST_PULL_UTC"] = pulled_at
+
     if not ev:
-        # reset state if no live
-        STATE.event_id = None
+        STATE.event_id = STATE.last_scoreline = None
         STATE.homeScore = STATE.awayScore = None
+        STATE.dedupe = DeDupe(maxlen=400)
         return
 
-    # 2) If new match or score changed, announce scoreline
-    score_changed = (
-        STATE.event_id != str(ev["id"]) or
-        STATE.homeScore != ev["homeScore"] or
-        STATE.awayScore != ev["awayScore"]
-    )
-    if score_changed:
+    if not is_fresh(pulled_at, 120):
+        msg = f"Updating live data… ({source_stamp('SofaScore')})"
+        for chat_id in subs:
+            try: await bot.send_message(chat_id=chat_id, text=msg)
+            except: pass
+        return
+
+    scoreline = f"{ev['homeScore']}-{ev['awayScore']}"
+    if STATE.event_id != str(ev["id"]) or STATE.last_scoreline != scoreline:
         STATE.event_id = str(ev["id"])
-        STATE.homeScore = ev["homeScore"]
-        STATE.awayScore = ev["awayScore"]
+        STATE.homeScore, STATE.awayScore = ev["homeScore"], ev["awayScore"]
+        STATE.last_scoreline = scoreline
         headline = PROV.short_event_line(ev)
         for chat_id in subs:
-            try:
-                await bot.send_message(chat_id=chat_id, text=headline, parse_mode="Markdown")
-            except Exception:
-                pass
+            try: await bot.send_message(chat_id=chat_id, text=headline, parse_mode="Markdown")
+            except: pass
 
-    # 3) Pull incidents and send only new ones
     incs = PROV.get_event_incidents(STATE.event_id)
-    for inc in incs[-5:]:  # last few only
+    for inc in incs[-6:]:
         key = f"{STATE.event_id}:{inc['id']}"
-        if not STATE.dedupe.is_new(key):
-            continue
-        # only push high-signal ones (you can expand)
-        if inc["type"] in ("goal", "yellow-card", "red-card", "substitution", "var", "period"):
-            text = _format_incident_line(inc)
+        if not STATE.dedupe.is_new(key): continue
+        if inc["type"] in ("goal","yellow-card","red-card","substitution","var","period"):
+            minute_txt = f"{inc['minute']} " if inc.get("minute") else ""
+            text = f"{minute_txt}{md_escape(inc['text'])}"
             for chat_id in subs:
-                try:
-                    await bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
-                except Exception:
-                    pass
+                try: await bot.send_message(chat_id=chat_id, text=text)
+                except: pass

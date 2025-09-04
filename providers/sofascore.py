@@ -1,126 +1,137 @@
-import os, time, requests
-from typing import Optional, Dict, Any, List, Union
+import os, time, random, json, requests
+from typing import Optional, Dict, Any, List
 
 BASE = "https://api.sofascore.com/api/v1"
-TEAM_ID = int(os.getenv("SOFA_TEAM_ID", "2817"))  # Real Madrid default
-UA = os.getenv("SOFA_USER_AGENT", "Mozilla/5.0 (compatible; Bot/1.0)")
+TEAM_ID = int(os.getenv("SOFA_TEAM_ID", "2817"))  # Real Madrid by default
+UA = os.getenv("SOFA_USER_AGENT", "Mozilla/5.0 MadridistaBot/1.0")
+
 S = requests.Session()
 S.headers.update({"User-Agent": UA, "Accept": "application/json"})
+S_TIMEOUT = 12
 
-def _get(path: str) -> dict:
-    r = S.get(f"{BASE}{path}", timeout=20)
-    r.raise_for_status()
-    return r.json()
+def _get_json(path: str, tries=2, base_pause=0.6) -> dict:
+    url = f"{BASE}{path}"
+    for i in range(tries):
+        try:
+            r = S.get(url, timeout=S_TIMEOUT)
+            if r.status_code in (429,) or 500 <= r.status_code < 600:
+                if i < tries-1:
+                    time.sleep(base_pause + random.random()*0.5)
+                    continue
+            r.raise_for_status()
+            return r.json()
+        except (requests.RequestException, json.JSONDecodeError):
+            if i < tries-1:
+                time.sleep(base_pause + random.random()*0.5)
+                continue
+    return {}  # soft-fail
 
-def _map_event(e):
-    # SofaScore event object → normalized
-    home = e.get("homeTeam", {}).get("name", "Home")
-    away = e.get("awayTeam", {}).get("name", "Away")
-    comp = e.get("tournament", {}).get("name", "") or e.get("season", {}).get("name", "")
-    score = e.get("homeScore", {}).get("current", 0), e.get("awayScore", {}).get("current", 0)
-    minute = e.get("time", {}).get("minute")  # can be None
+def _dig(d, *path):
+    cur = d
+    for k in path:
+        if not isinstance(cur, dict) or k not in cur: return None
+        cur = cur[k]
+    return cur
+
+def _minute_tuple(inc_time: dict) -> tuple[int, int]:
+    if not inc_time: return (0, 0)
+    m = inc_time.get("minute")
+    ex = inc_time.get("extra") or 0
+    if m is None: return (0, 0)
+    return (int(m), int(ex))
+
+def minute_display(inc_time: dict) -> Optional[str]:
+    if not inc_time: return None
+    m = inc_time.get("minute")
+    if m is None: return None
+    ex = inc_time.get("extra")
+    core = f"{m}+{ex}" if ex else f"{m}"
+    return core + "′"
+
+def scorer_text(inc: dict) -> str:
+    for path in (("player","name"), ("goal","scorer","name"), ("playerIn","name")):
+        v = _dig(inc, *path)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return "Goal"
+
+def _map_event(e: dict) -> Dict[str, Any]:
+    home = _dig(e, "homeTeam", "name") or "Home"
+    away = _dig(e, "awayTeam", "name") or "Away"
+    comp = _dig(e, "tournament", "name") or _dig(e, "season", "name") or ""
+    hs = _dig(e, "homeScore", "current") or 0
+    as_ = _dig(e, "awayScore", "current") or 0
+    minute = _dig(e, "time", "minute")
     return {
         "id": e.get("id"),
         "homeName": home,
         "awayName": away,
-        "homeScore": score[0],
-        "awayScore": score[1],
+        "homeScore": hs,
+        "awayScore": as_,
         "minute": minute,
-        "competition": comp or "",
-    }
-
-def _map_incident(inc, home_id, away_id):
-    # Common types:
-    # type: 'goal', 'yellow-card', 'red-card', 'substitution', 'var', 'period' etc.
-    itype = inc.get("type")
-    minute = inc.get("time", {}).get("minute")
-    team_side = None
-    tid = inc.get("team", {}).get("id")
-    if home_id and tid == home_id:
-        team_side = "home"
-    elif away_id and tid == away_id:
-        team_side = "away"
-
-    desc = []
-    # player text
-    for key in ("player", "playerIn", "playerOut"):
-        p = inc.get(key, {})
-        if p and p.get("name"):
-            tag = "in" if key == "playerIn" else ("out" if key == "playerOut" else "")
-            desc.append(f"{p['name']}{' (in)' if tag=='in' else ''}{' (out)' if tag=='out' else ''}")
-
-    # build human text
-    human = ""
-    if itype == "goal":
-        who = desc[0] if desc else "Goal"
-        human = f"{who} scores"
-    elif itype == "yellow-card":
-        who = desc[0] if desc else "Yellow card"
-        human = f"Yellow card: {who}"
-    elif itype == "red-card":
-        who = desc[0] if desc else "Red card"
-        human = f"RED card: {who}"
-    elif itype == "substitution":
-        human = "Substitution: " + (", ".join(desc) if desc else "")
-    elif itype == "var":
-        human = "VAR check"
-    elif itype == "period":
-        #  'HT', 'FT', etc.
-        period = inc.get("text", "Period")
-        human = period
-    else:
-        human = inc.get("text") or itype or "Event"
-
-    # a stable ID if sofa doesn't provide one
-    inc_id = inc.get("id") or f"{itype}-{minute}-{tid}-{int(time.time()*1000)%100000}"
-
-    return {
-        "id": inc_id,
-        "type": itype,
-        "minute": minute,
-        "team": team_side,
-        "text": human
+        "competition": comp
     }
 
 class SofaScoreProvider:
-    def __init__(self, team_id: Union[int, None] = None):
+    def __init__(self, team_id: Optional[int] = None):
         self.team_id = int(team_id or TEAM_ID)
 
-    def get_team_live_event(self):
-        # Option A: global live list, filter by team id
-        # /sport/football/events/live
-        try:
-            data = _get("/sport/football/events/live")
-            for e in data.get("events", []):
-                home_id = e.get("homeTeam", {}).get("id")
-                away_id = e.get("awayTeam", {}).get("id")
-                if home_id == self.team_id or away_id == self.team_id:
-                    return _map_event(e)
-            return None
-        except Exception as e:
-            print(f"SofaScore live event error: {e}")
-            return None
+    def get_team_live_event(self) -> Optional[Dict[str, Any]]:
+        data = _get_json("/sport/football/events/live")
+        for e in data.get("events", []) or []:
+            hid = _dig(e, "homeTeam", "id")
+            aid = _dig(e, "awayTeam", "id")
+            if hid == self.team_id or aid == self.team_id:
+                return _map_event(e)
+        return None
 
-    def get_event_incidents(self, event_id):
-        # /event/{id}/incidents
-        try:
-            data = _get(f"/event/{event_id}/incidents")
-            # also need team ids for side mapping
-            info = _get(f"/event/{event_id}")
-            e = info.get("event", {})
-            home_id = e.get("homeTeam", {}).get("id")
-            away_id = e.get("awayTeam", {}).get("id")
-            incidents = data.get("incidents", []) or []
-            out = []
-            for inc in incidents:
-                out.append(_map_incident(inc, home_id, away_id))
-            # sort by minute (None last)
-            out.sort(key=lambda x: (x["minute"] is None, x["minute"] if x["minute"] is not None else 9999))
-            return out
-        except Exception as e:
-            print(f"SofaScore incidents error: {e}")
-            return []
+    def get_event_incidents(self, event_id: str | int) -> List[Dict[str, Any]]:
+        data = _get_json(f"/event/{event_id}/incidents")
+        info = _get_json(f"/event/{event_id}")
+        e = info.get("event", {}) if isinstance(info, dict) else {}
+        home_id = _dig(e, "homeTeam", "id")
+        away_id = _dig(e, "awayTeam", "id")
+        incs = data.get("incidents", []) or []
+        out = []
+        for inc in incs:
+            itype = inc.get("type")
+            tside = None
+            tid = _dig(inc, "team", "id")
+            if home_id and tid == home_id: tside = "home"
+            elif away_id and tid == away_id: tside = "away"
+            mdisp = minute_display(_dig(inc, "time") or {})
+            text = ""
+            if itype == "goal":
+                text = f"{scorer_text(inc)} scores"
+            elif itype == "yellow-card":
+                text = f"Yellow card: {scorer_text(inc)}"
+            elif itype == "red-card":
+                text = f"RED card: {scorer_text(inc)}"
+            elif itype == "substitution":
+                pin = _dig(inc, "playerIn", "name") or "On"
+                pout = _dig(inc, "playerOut", "name") or "Off"
+                text = f"Substitution: {pin} for {pout}"
+            elif itype == "period":
+                text = inc.get("text") or "Period"
+            elif itype == "var":
+                text = "VAR check"
+            else:
+                text = inc.get("text") or (itype or "Event")
 
-    def short_event_line(self, event):
-        minute = f"{event['minute']}'" if event.get("minute") else ""
-        return f"**LIVE** {minute}\n{event['homeName']} {event['homeScore']} – {event['awayScore']} {event['awayName']}\n{event['competition']}"
+            base_m, base_ex = _minute_tuple(_dig(inc, "time") or {})
+            inc_id = inc.get("id") or f"{itype}-{base_m}+{base_ex}-{tid}-{int(time.time()*1000)%100000}"
+            out.append({
+                "id": inc_id,
+                "type": itype,
+                "minute": mdisp,
+                "minute_sort": (base_m, base_ex),
+                "team": tside,
+                "text": text
+            })
+        out.sort(key=lambda x: (x["minute_sort"][0], x["minute_sort"][1]))
+        return out
+
+    def short_event_line(self, ev: Dict[str, Any]) -> str:
+        from utils.formatting import md_escape
+        mn = f"{int(ev['minute'])}′ " if ev.get("minute") is not None else ""
+        return f"*LIVE* {mn}\n{md_escape(ev['homeName'])} {ev['homeScore']} – {ev['awayScore']} {md_escape(ev['awayName'])}\n{md_escape(ev.get('competition',''))}"
