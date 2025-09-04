@@ -12,6 +12,10 @@ from data.football_knowledge import (
     get_banter_responses, REAL_MADRID_FACTS, LA_LIGA_TEAMS_2024
 )
 
+# Import live monitoring
+from utils.store import load_subs, save_subs
+from live.monitor import monitor_tick, POLL_SECONDS
+
 # Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -34,6 +38,7 @@ class MadridistaTelegramBot:
         
         self.application = Application.builder().token(self.token).build()
         self.setup_handlers()
+        self.setup_live_monitoring()
     
     def setup_handlers(self):
         """Setup command and message handlers"""
@@ -51,8 +56,41 @@ class MadridistaTelegramBot:
         self.application.add_handler(CommandHandler("news", self.news_command))
         self.application.add_handler(CommandHandler("highlights", self.highlights_command))
         
+        # Live monitoring commands
+        self.application.add_handler(CommandHandler("enablelive", self.enablelive_cmd))
+        self.application.add_handler(CommandHandler("disablelive", self.disablelive_cmd))
+        
         # Message handler for general conversation
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+    
+    def setup_live_monitoring(self):
+        """Setup live monitoring job queue"""
+        # Load existing subscribers into memory once
+        self.application.bot_data["subs"] = set(load_subs())
+        
+        # Schedule the live monitor (every POLL_SECONDS)
+        self.application.job_queue.run_repeating(monitor_tick, interval=POLL_SECONDS, first=5)
+        logger.info(f"Live monitoring scheduled every {POLL_SECONDS} seconds")
+    
+    async def enablelive_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /enablelive command - subscribe to live updates"""
+        subs: set[int] = context.application.bot_data.setdefault("subs", set(load_subs()))
+        chat_id = update.effective_chat.id
+        subs.add(chat_id)
+        save_subs(subs)
+        context.application.bot_data["subs"] = subs
+        
+        await update.message.reply_text("✅ **Live updates enabled for this chat!**\n\nYou'll now receive real-time updates when Real Madrid scores or when the match status changes!\n\nUse `/disablelive` to unsubscribe.")
+    
+    async def disablelive_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /disablelive command - unsubscribe from live updates"""
+        subs: set[int] = context.application.bot_data.setdefault("subs", set(load_subs()))
+        chat_id = update.effective_chat.id
+        subs.discard(chat_id)
+        save_subs(subs)
+        context.application.bot_data["subs"] = subs
+        
+        await update.message.reply_text("🛑 **Live updates disabled for this chat.**\n\nYou won't receive live match updates anymore.\n\nUse `/enablelive` to subscribe again.")
     
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
@@ -70,6 +108,8 @@ class MadridistaTelegramBot:
             "/live - Live match updates\n"
             "/news - Latest transfer news\n"
             "/highlights - Match highlights\n"
+            "/enablelive - Subscribe to live updates\n"
+            "/disablelive - Unsubscribe from live updates\n"
             "/help - Show this help message\n\n"
             "Just chat with me about Real Madrid! Ask me anything about the club, players, history, or current events."
         )
@@ -90,6 +130,8 @@ class MadridistaTelegramBot:
             "/live - Live match updates\n"
             "/news - Latest transfer news\n"
             "/highlights - Match highlights\n"
+            "/enablelive - Subscribe to live updates\n"
+            "/disablelive - Unsubscribe from live updates\n"
             "/help - Show this help message\n\n"
             "You can also just chat with me about Real Madrid!"
         )
@@ -310,6 +352,12 @@ class MadridistaTelegramBot:
                 status_text += "🔴 **OpenAI API**: Not configured\n"
                 status_text += "   • AI responses will not work\n\n"
             
+            # Live monitoring status
+            subs = context.application.bot_data.get("subs", set())
+            status_text += f"🔴 **Live Monitoring**: {len(subs)} chats subscribed\n"
+            status_text += f"   • Updates every {POLL_SECONDS} seconds\n"
+            status_text += f"   • Use /enablelive to subscribe\n\n"
+            
             status_text += "💡 **To get live data, add API keys to Railway environment variables**"
             
             await update.message.reply_text(status_text)
@@ -498,7 +546,7 @@ class MadridistaTelegramBot:
                 
                 elif any(comp in user_message for comp in ['liga', 'la liga', 'spanish league']):
                     comp_info = get_competition_info("la liga")
-                    response = f"🏆 **{comp_info['name']}**\nMadrid has won {comp_info['madrid_titles']} titles!\n{teams} teams, {comp_info['matches']} matches per season"
+                    response = f"🏆 **{comp_info['name']}**\nMadrid has won {comp_info['madrid_titles']} titles!\n{comp_info['teams']} teams, {comp_info['matches']} matches per season"
                     await update.message.reply_text(response)
                     return
                 

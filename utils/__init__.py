@@ -1,1 +1,1 @@
-# Utils package for MadridistaAI
+# Utils package for MadridistaAI bot
