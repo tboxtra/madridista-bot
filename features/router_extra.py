@@ -1,8 +1,9 @@
 # features/router_extra.py
 import re
-from providers.fd_wrap import league_table, team_matches, scorers
+from nlp.resolve import resolve_team, resolve_comp
+from providers.unified import fd_team_matches, fd_comp_table, fd_comp_scorers
 from providers.sofascore import SofaScoreProvider
-from features.answers import fmt_table, fmt_form, fmt_scorers, fmt_squad, fmt_injuries
+from features.answers import fmt_table_top, fmt_recent_form, fmt_scorers, fmt_squad, fmt_injuries
 
 # Initialize SofaScore provider
 sofa_provider = SofaScoreProvider()
@@ -23,20 +24,40 @@ def route_related(text: str):
 
     if P_TABLE.search(t):
         try:
-            return fmt_table(league_table("laliga"))
+            comp_id = resolve_comp(t)  # default LaLiga
+            table_data = fd_comp_table(comp_id)
+            if table_data:
+                comp_name = "League Table"
+                if "competition" in table_data:
+                    comp_name = table_data["competition"].get("name", "League Table")
+                return fmt_table_top(table_data, top=5, title=f"{comp_name} (Top 5)")
+            else:
+                return "Table data is unavailable at the moment."
         except Exception:
             return "Table data is unavailable at the moment."
 
     if P_FORM.search(t):
         try:
-            ms = team_matches("Real Madrid", status="FINISHED", limit=10)
-            return fmt_form(ms, k=5)
+            team_id = resolve_team(t)  # default Real Madrid
+            if team_id:
+                ms = fd_team_matches(team_id, status="FINISHED", limit=10)
+                if ms:
+                    return fmt_recent_form(ms, k=5)
+                else:
+                    return "No recent results found."
+            else:
+                return "Please specify a team for form information."
         except Exception:
             return "Recent form data is unavailable."
 
     if P_SCORERS.search(t):
         try:
-            return fmt_scorers(scorers("laliga", limit=10))
+            comp_id = resolve_comp(t)  # default LaLiga
+            js = fd_comp_scorers(comp_id, limit=10)
+            if js and "scorers" in js:
+                return fmt_scorers(js)
+            else:
+                return "Scorers data unavailable."
         except Exception:
             return "Scorers data is unavailable."
 

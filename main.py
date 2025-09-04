@@ -125,10 +125,24 @@ class MadridistaBot:
     async def table_cmd(self, update, context):
         """Handle /table command"""
         try:
-            from providers.fd_wrap import league_table
-            from features.answers import fmt_table
-            table_data = league_table("laliga")
-            await update.message.reply_text(fmt_table(table_data), parse_mode="Markdown")
+            from nlp.resolve import resolve_comp
+            from providers.unified import fd_comp_table
+            from features.answers import fmt_table_top
+            
+            # Can specify league or default to LaLiga
+            args = context.args
+            league_text = " ".join(args) if args else "laliga"
+            comp_id = resolve_comp(league_text)
+            
+            table_data = fd_comp_table(comp_id)
+            if table_data:
+                # Get competition name for title
+                comp_name = "League Table"
+                if "competition" in table_data:
+                    comp_name = table_data["competition"].get("name", "League Table")
+                await update.message.reply_text(fmt_table_top(table_data, top=5, title=f"{comp_name} (Top 5)"), parse_mode="Markdown")
+            else:
+                await update.message.reply_text("Table data temporarily unavailable.")
         except Exception as e:
             logger.error(f"Error in table command: {e}")
             await update.message.reply_text("Table data temporarily unavailable.")
@@ -136,10 +150,23 @@ class MadridistaBot:
     async def form_cmd(self, update, context):
         """Handle /form command"""
         try:
-            from providers.fd_wrap import team_matches
-            from features.answers import fmt_form
-            matches = team_matches("Real Madrid", status="FINISHED", limit=10)
-            await update.message.reply_text(fmt_form(matches, k=5), parse_mode="Markdown")
+            from nlp.resolve import resolve_team
+            from providers.unified import fd_team_matches
+            from features.answers import fmt_recent_form
+            
+            # Can specify team or default to Madrid
+            args = context.args
+            team_text = " ".join(args) if args else "madrid"
+            team_id = resolve_team(team_text)
+            
+            if team_id:
+                matches = fd_team_matches(team_id, status="FINISHED", limit=10)
+                if matches:
+                    await update.message.reply_text(fmt_recent_form(matches, k=5), parse_mode="Markdown")
+                else:
+                    await update.message.reply_text("No recent results found.")
+            else:
+                await update.message.reply_text("Please specify a valid team name.")
         except Exception as e:
             logger.error(f"Error in form command: {e}")
             await update.message.reply_text("Form data temporarily unavailable.")
@@ -147,10 +174,20 @@ class MadridistaBot:
     async def scorers_cmd(self, update, context):
         """Handle /scorers command"""
         try:
-            from providers.fd_wrap import scorers
+            from nlp.resolve import resolve_comp
+            from providers.unified import fd_comp_scorers
             from features.answers import fmt_scorers
-            scorers_data = scorers("laliga", limit=10)
-            await update.message.reply_text(fmt_scorers(scorers_data), parse_mode="Markdown")
+            
+            # Can specify league or default to LaLiga
+            args = context.args
+            league_text = " ".join(args) if args else "laliga"
+            comp_id = resolve_comp(league_text)
+            
+            scorers_data = fd_comp_scorers(comp_id, limit=10)
+            if scorers_data and "scorers" in scorers_data:
+                await update.message.reply_text(fmt_scorers(scorers_data), parse_mode="Markdown")
+            else:
+                await update.message.reply_text("Scorers data temporarily unavailable.")
         except Exception as e:
             logger.error(f"Error in scorers command: {e}")
             await update.message.reply_text("Scorers data temporarily unavailable.")
