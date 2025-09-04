@@ -41,12 +41,20 @@ class MadridistaBot:
     
     def setup_live_monitoring(self):
         """Setup live monitoring job queue"""
-        # Initialize subscribers
-        self.application.bot_data["subs"] = set()
-        
-        # Schedule the live monitor (every POLL_SECONDS)
-        self.application.job_queue.run_repeating(monitor_tick, interval=POLL_SECONDS, first=5)
-        logger.info(f"Live monitoring scheduled every {POLL_SECONDS} seconds")
+        try:
+            # Initialize subscribers
+            self.application.bot_data["subs"] = set()
+            
+            # Schedule the live monitor (every POLL_SECONDS) with error handling
+            try:
+                self.application.job_queue.run_repeating(monitor_tick, interval=POLL_SECONDS, first=5)
+                logger.info(f"Live monitoring scheduled every {POLL_SECONDS} seconds")
+            except Exception as e:
+                logger.warning(f"Could not schedule live monitoring: {e}")
+                logger.info("Bot will work without live monitoring")
+        except Exception as e:
+            logger.error(f"Error setting up live monitoring: {e}")
+            logger.info("Bot will work without live monitoring")
     
     async def start_command(self, update, context):
         """Handle /start command"""
