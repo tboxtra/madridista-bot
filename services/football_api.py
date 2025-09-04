@@ -2,6 +2,11 @@ import os
 import aiohttp
 import asyncio
 from datetime import datetime, timedelta
+from utils.time_utils import (
+    get_current_time, get_utc_now, format_time_until, 
+    format_match_time, get_time_status, is_match_live,
+    format_last_updated
+)
 from typing import Dict, List, Optional, Any
 import logging
 
@@ -76,7 +81,7 @@ class FootballAPIService:
             'website': 'www.realmadrid.com',
             'crest': '',
             'colors': 'White and Gold',
-            'last_updated': datetime.now().isoformat(),
+            'last_updated': format_last_updated(),
             'source': 'Fallback Data'
         }
     
@@ -151,11 +156,11 @@ class FootballAPIService:
                 # Get matches with focus on immediate upcoming
                 matches_url = f"{self.football_data_base}/teams/{self.real_madrid_id}/matches"
                 
-                # Get more matches initially to filter properly
+                # Get more matches initially to filter properly - focus on immediate future
                 params = {
                     'limit': 30,  # Get more to filter properly
-                    'dateFrom': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d'),  # Yesterday
-                    'dateTo': (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')    # Next week
+                    'dateFrom': (get_current_time() - timedelta(days=1)).strftime('%Y-%m-%d'),  # Yesterday
+                    'dateTo': (get_current_time() + timedelta(days=14)).strftime('%Y-%m-%d')    # Next 2 weeks
                 }
                 
                 async with session.get(matches_url, headers=headers, params=params) as response:
@@ -166,16 +171,16 @@ class FootballAPIService:
                         
                         # Process and prioritize matches by immediacy
                         processed_matches = []
-                        now = datetime.now()
                         
                         for match in all_matches:
                             try:
-                                match_date = datetime.fromisoformat(match.get('utcDate', '').replace('Z', '+00:00'))
-                                # Convert to local time (assuming UTC)
-                                match_date_local = match_date.replace(tzinfo=None)
+                                match_date_str = match.get('utcDate', '')
+                                if not match_date_str:
+                                    continue
                                 
-                                # Calculate time difference in minutes
-                                time_diff_minutes = (match_date_local - now).total_seconds() / 60
+                                # Use new time utilities for better formatting
+                                time_status = get_time_status(match_date_str)
+                                time_until = format_time_until(match_date_str)
                                 
                                 processed_matches.append({
                                     'id': match.get('id', ''),  # Add match ID for live updates
@@ -183,9 +188,9 @@ class FootballAPIService:
                                     'away_team': match.get('awayTeam', {}).get('name', ''),
                                     'home_score': match.get('score', {}).get('fullTime', {}).get('home'),
                                     'away_score': match.get('score', {}).get('fullTime', {}).get('away'),
-                                    'date': match.get('utcDate', ''),
-                                    'match_date': match_date_local,
-                                    'time_diff_minutes': time_diff_minutes,  # For prioritization
+                                    'date': match_date_str,
+                                    'time_status': time_status,
+                                    'time_until': time_until,
                                     'competition': match.get('competition', {}).get('name', ''),
                                     'status': match.get('status', ''),
                                     'venue': match.get('venue', ''),
@@ -197,23 +202,28 @@ class FootballAPIService:
                         
                         # Sort by priority: LIVE > Starting soon > Today > Recent > Upcoming
                         def match_priority(match):
-                            time_diff = match.get('time_diff_minutes', 999999)
+                            time_status = match.get('time_status', '📅 Upcoming')
                             
-                            # LIVE matches (happening now)
-                            if match.get('status') == 'LIVE':
+                            # Live matches get highest priority
+                            if '⚡ Live' in time_status:
                                 return -1000
-                            # Starting in next 30 minutes
-                            elif 0 <= time_diff <= 30:
-                                return -500 + time_diff
-                            # Today's matches
-                            elif match.get('match_date').date() == now.date():
-                                return 0 + time_diff
-                            # Recent matches (yesterday)
-                            elif time_diff < 0:
-                                return 1000 + abs(time_diff)
-                            # Upcoming matches
+                            # Starting soon (15 minutes) gets high priority
+                            elif '🚨 Starting soon' in time_status:
+                                return -500
+                            # Starting soon (1 hour) gets medium priority
+                            elif '⏰ Starting soon' in time_status:
+                                return -200
+                            # Today/Tomorrow gets normal priority
+                            elif '📅 Today/Tomorrow' in time_status:
+                                return 0
+                            # Upcoming gets lower priority
+                            elif '📅 Upcoming' in time_status:
+                                return 1000
+                            # Finished matches get lowest priority
+                            elif '🏁 Finished' in time_status:
+                                return 2000
                             else:
-                                return 2000 + time_diff
+                                return 1500
                         
                         processed_matches.sort(key=match_priority)
                         
@@ -402,7 +412,7 @@ class FootballAPIService:
                             'status': match_data.get('status', ''),
                             'competition': match_data.get('competition', {}).get('name', ''),
                             'venue': match_data.get('venue', ''),
-                            'last_updated': datetime.now().isoformat(),
+                            'last_updated': format_last_updated(),
                             'source': 'Live API'
                         }
                         
@@ -515,7 +525,7 @@ class FootballAPIService:
             'status': 'LIVE',
             'competition': 'La Liga',
             'venue': 'Santiago Bernabéu',
-            'last_updated': datetime.now().isoformat(),
+            'last_updated': format_last_updated(),
             'source': 'Fallback Data'
         }
     
@@ -526,7 +536,7 @@ class FootballAPIService:
                 'title': 'Real Madrid Transfer Update',
                 'summary': 'Transfer news temporarily unavailable. Check back soon for latest updates.',
                 'url': '',
-                'published_at': datetime.now().isoformat(),
+                'published_at': format_last_updated(),
                 'source': 'Fallback Data'
             }
         ]

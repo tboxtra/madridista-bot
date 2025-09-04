@@ -76,6 +76,9 @@ class MadridistaTelegramBot:
         # Advanced AI commands
         self.application.add_handler(CommandHandler("analyze", self.analyze_cmd))
         
+        # Time and timezone commands
+        self.application.add_handler(CommandHandler("time", self.time_cmd))
+        
         # Memory tap handler (runs first to store messages)
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._tap_memory), group=0)
         
@@ -171,6 +174,41 @@ class MadridistaTelegramBot:
             logger.error(f"Error in analyze command: {e}")
             await update.message.reply_text("Sorry, couldn't complete the analysis right now!")
     
+    async def time_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /time command - show current time and timezone information"""
+        try:
+            from utils.time_utils import get_timezone_info, get_current_time, get_utc_now
+            
+            # Get time information
+            timezone_info = get_timezone_info()
+            current_time = get_current_time()
+            utc_time = get_utc_now()
+            
+            # Format the response
+            response = f"🕐 **Current Time Information** 🕐\n\n"
+            response += f"**Local Time:** {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+            response += f"**UTC Time:** {utc_time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+            response += f"**Timezone:** {current_time.tzinfo}\n\n"
+            
+            # Add timezone conversion examples
+            response += "**Popular Timezones:**\n"
+            popular_tz = ['Europe/Madrid', 'America/New_York', 'Asia/Tokyo', 'Australia/Sydney']
+            
+            for tz_name in popular_tz:
+                try:
+                    tz_time = get_current_time(tz_name)
+                    response += f"• {tz_name}: {tz_time.strftime('%H:%M:%S %Z')}\n"
+                except:
+                    continue
+            
+            response += f"\n**Bot Status:** ✅ Running with latest time utilities"
+            
+            await update.message.reply_text(response)
+            
+        except Exception as e:
+            logger.error(f"Error in time command: {e}")
+            await update.message.reply_text("Sorry, couldn't get time information right now!")
+    
     async def _tap_memory(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Memory tap handler - stores messages for conversational context"""
         msg = update.message
@@ -201,6 +239,7 @@ class MadridistaTelegramBot:
             "/banteron - Enable smart banter in this chat\n"
             "/banteroff - Disable smart banter in this chat\n"
             "/analyze - Advanced AI analysis with GPT-5\n"
+            "/time - Show current time and timezone info\n"
             "/help - Show this help message\n\n"
             "Just chat with me about Real Madrid! Ask me anything about the club, players, history, or current events."
         )
@@ -227,6 +266,7 @@ class MadridistaTelegramBot:
             "/banteron - Enable smart banter in this chat\n"
             "/banteroff - Disable smart banter in this chat\n"
             "/analyze - Advanced AI analysis with GPT-5\n"
+            "/time - Show current time and timezone info\n"
             "/help - Show this help message\n\n"
             "You can also just chat with me about Real Madrid!"
         )
