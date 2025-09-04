@@ -45,13 +45,28 @@ def generate_short_post(user_prompt: str, max_chars: int = 240) -> str:
         {"role": "user", "content": f"Keep to <= {max_chars} characters.\n{enhanced_prompt}"}
     ]
 
-    resp = client.chat.completions.create(
-        model="gpt-3.5-turbo",  # cheaper alternative
-        messages=messages,
-        temperature=0.7,  # Slightly lower for more consistent responses
-        max_tokens=150,  # plenty for ~200 characters
-    )
-    return resp.choices[0].message.content.strip()
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o",  # Latest and most capable model
+            messages=messages,
+            temperature=0.7,  # Slightly lower for more consistent responses
+            max_tokens=150,  # plenty for ~200 characters
+            response_format={"type": "text"},  # Ensure text output
+            seed=42,  # Consistent responses for similar inputs
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        # Fallback to GPT-3.5-turbo if GPT-4o fails
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=150,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception:
+            return "¡Hala Madrid! 🤍⚽"
 
 def banter_reply(context_blob):
     """Generate short, witty banter for group chat replies"""
@@ -68,8 +83,59 @@ def banter_reply(context_blob):
         return "Calma… champions DNA speaks for itself. 🤍"
 
 def riff_short(prompt, fallback="Calma… Champions DNA talks. 🤍", max_tokens=80):
-    """Generate a short, witty response for group chat"""
+    """Generate a short, witty response for group chat using latest GPT-4o"""
     try:
         return generate_short_post(prompt, max_chars=180)
     except Exception:
         return fallback
+
+def analyze_madrid_context(context: str, question: str) -> str:
+    """
+    Advanced analysis using GPT-4o for complex Real Madrid questions.
+    Better reasoning, fact-checking, and detailed responses.
+    """
+    try:
+        client = _get_client()
+        
+        system_prompt = """You are a Real Madrid expert analyst with deep knowledge of:
+        - Current squad, players, and performance
+        - Historical achievements and records
+        - Tactical analysis and match insights
+        - Transfer market and club news
+        - Rival analysis and comparisons
+        
+        Provide detailed, accurate, and engaging analysis. Use specific facts, stats, and insights."""
+        
+        user_prompt = f"""Context: {context}
+        
+        Question: {question}
+        
+        Please provide a comprehensive but concise analysis (max 300 characters)."""
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            temperature=0.3,  # Lower for more factual responses
+            max_tokens=200,
+            response_format={"type": "text"},
+            seed=42,
+        )
+        return resp.choices[0].message.content.strip()
+        
+    except Exception as e:
+        # Fallback to GPT-3.5-turbo
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                temperature=0.3,
+                max_tokens=200,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception:
+            return "Let me check the latest Real Madrid updates for you! 🤍⚽"

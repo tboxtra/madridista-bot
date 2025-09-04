@@ -73,6 +73,9 @@ class MadridistaTelegramBot:
         self.application.add_handler(CommandHandler("banteron", self.banteron_cmd))
         self.application.add_handler(CommandHandler("banteroff", self.banteroff_cmd))
         
+        # Advanced AI commands
+        self.application.add_handler(CommandHandler("analyze", self.analyze_cmd))
+        
         # Memory tap handler (runs first to store messages)
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._tap_memory), group=0)
         
@@ -135,6 +138,39 @@ class MadridistaTelegramBot:
         
         await update.message.reply_text("🤐 **Smart banter disabled for this chat.**\n\nI'll stay quiet and only respond to direct commands now.\n\nUse `/banteron` to re-enable the fun!")
     
+    async def analyze_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /analyze command - advanced AI analysis using GPT-4o"""
+        try:
+            if not context.args:
+                await update.message.reply_text(
+                    "🔍 **Advanced AI Analysis** 🔍\n\n"
+                    "Usage: `/analyze <your question>`\n\n"
+                    "Examples:\n"
+                    "• `/analyze Why is Vinicius so effective this season?`\n"
+                    "• `/analyze Compare Real Madrid's tactics to Barcelona's`\n"
+                    "• `/analyze How has Ancelotti improved the team?`\n\n"
+                    "Powered by GPT-4o for deep insights! 🤖⚽"
+                )
+                return
+            
+            question = " ".join(context.args)
+            await update.message.reply_text("🧠 **Analyzing with GPT-4o...**\n\nThis may take a moment for detailed insights.")
+            
+            # Get conversation context
+            chat_id = update.effective_chat.id
+            turns = get_context(chat_id, k=10)
+            context_text = "\n".join([f"{a}: {t}" for (a, t) in turns[-8:]])
+            
+            # Use advanced analysis
+            from ai_engine.gpt_engine import analyze_madrid_context
+            analysis = analyze_madrid_context(context_text, question)
+            
+            await update.message.reply_text(f"🔍 **AI Analysis** 🔍\n\n**Question:** {question}\n\n{analysis}")
+            
+        except Exception as e:
+            logger.error(f"Error in analyze command: {e}")
+            await update.message.reply_text("Sorry, couldn't complete the analysis right now!")
+    
     async def _tap_memory(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Memory tap handler - stores messages for conversational context"""
         msg = update.message
@@ -164,6 +200,7 @@ class MadridistaTelegramBot:
             "/disablelive - Unsubscribe from live updates\n"
             "/banteron - Enable smart banter in this chat\n"
             "/banteroff - Disable smart banter in this chat\n"
+            "/analyze - Advanced AI analysis with GPT-4o\n"
             "/help - Show this help message\n\n"
             "Just chat with me about Real Madrid! Ask me anything about the club, players, history, or current events."
         )
@@ -189,6 +226,7 @@ class MadridistaTelegramBot:
             "/disablelive - Unsubscribe from live updates\n"
             "/banteron - Enable smart banter in this chat\n"
             "/banteroff - Disable smart banter in this chat\n"
+            "/analyze - Advanced AI analysis with GPT-4o\n"
             "/help - Show this help message\n\n"
             "You can also just chat with me about Real Madrid!"
         )

@@ -1,7 +1,7 @@
 import os, time, re, random
 from telegram import Update
 from telegram.ext import ContextTypes
-from ai_engine.gpt_engine import riff_short
+from ai_engine.gpt_engine import riff_short, analyze_madrid_context
 from utils.memory import get_context
 from media.media_lib import pick_media_for
 
@@ -108,13 +108,23 @@ async def chat_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     user_line = f"{msg.from_user.first_name}: {txt}"
     transcript = (convo + ("\n" if convo else "") + user_line)[-1200:]
 
-    # ask LLM for short witty reply
-    prompt = (
-        "You are a Real Madrid superfan in a Telegram group. "
-        "Reply with short, witty, human banter. 1 sentence, <=180 chars, no hashtags/links, light emojis ok.\n\n"
-        f"Conversation so far:\n{transcript}"
-    )
-    reply = riff_short(prompt, fallback="Calma… Champions DNA talks. 🤍", max_tokens=80)
+    # Check if this is a complex question that needs detailed analysis
+    is_complex_question = any(word in txt.lower() for word in ["why", "how", "explain", "analysis", "compare", "difference", "tactics", "strategy"])
+    
+    if is_complex_question:
+        # Use advanced analysis for complex questions
+        reply = analyze_madrid_context(transcript, txt)
+        if len(reply) > 300:
+            reply = reply[:297] + "..."
+    else:
+        # Use witty banter for simple statements
+        prompt = (
+            "You are a Real Madrid superfan in a Telegram group. "
+            "Reply with short, witty, human banter. 1 sentence, <=180 chars, no hashtags/links, light emojis ok.\n\n"
+            f"Conversation so far:\n{transcript}"
+        )
+        reply = riff_short(prompt, fallback="Calma… Champions DNA talks. 🤍", max_tokens=80)
+    
     if _too_toxic(reply):
         reply = "Focus on football. 🤍"
 
