@@ -143,19 +143,35 @@ def get_ai_enhanced_response(question: str) -> str:
     # Generate contextual response based on AI analysis
     if response_type == "h2h" and len(teams) >= 2:
         team1, team2 = teams[0], teams[1]
-        return f"🤖 **AI Analysis**: You're asking about the last match between {team1['name']} and {team2['name']}. Let me fetch that data for you..."
+        return f"🔍 **Analyzing**: Looking for the last match between {team1['name']} and {team2['name']}..."
     
     elif response_type == "table" and competitions:
         comp = competitions[0]
-        return f"🤖 **AI Analysis**: You want to see the {comp['name']} table. Let me get the current standings..."
+        return f"🔍 **Analyzing**: Fetching {comp['name']} table data..."
     
     elif response_type == "form" and teams:
         team = teams[0]
-        return f"🤖 **AI Analysis**: You want to see {team['name']}'s recent form. Let me fetch their last few results..."
+        return f"🔍 **Analyzing**: Getting {team['name']}'s recent form..."
     
     elif response_type == "scorers" and competitions:
         comp = competitions[0]
-        return f"🤖 **AI Analysis**: You want to see the top scorers in {comp['name']}. Let me get that data..."
+        return f"🔍 **Analyzing**: Finding top scorers in {comp['name']}..."
+    
+    elif response_type == "next" and teams:
+        team = teams[0]
+        return f"🔍 **Analyzing**: Checking {team['name']}'s upcoming fixtures..."
+    
+    elif response_type == "last" and teams:
+        team = teams[0]
+        return f"🔍 **Analyzing**: Finding {team['name']}'s last match result..."
+    
+    elif response_type == "squad" and teams:
+        team = teams[0]
+        return f"🔍 **Analyzing**: Getting {team['name']}'s current squad..."
+    
+    elif response_type == "injuries" and teams:
+        team = teams[0]
+        return f"🔍 **Analyzing**: Checking {team['name']}'s injury list..."
     
     else:
-        return f"🤖 **AI Analysis**: I understand you're asking about {intent}. Let me find the relevant information for you..."
+        return f"🔍 **Analyzing**: Processing your football question..."

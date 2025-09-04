@@ -317,17 +317,16 @@ class MadridistaBot:
                         # Try football router first
                         football_answer = route_football(update.message.text)
                         if football_answer:
-                            # Combine AI analysis with actual data
-                            combined_response = f"{ai_response}\n\n📊 **Data Response:**\n{football_answer}"
-                            await update.message.reply_text(combined_response, parse_mode="Markdown")
+                            # Show actual data directly (no AI fluff when data is available)
+                            await update.message.reply_text(football_answer, parse_mode="Markdown")
                             return
                         
                         # Try Madrid router for Madrid-specific questions
                         if any(team.get("name", "").lower() in ["madrid", "real madrid"] for team in teams):
                             madrid_answer = route_related(update.message.text)
                             if madrid_answer:
-                                combined_response = f"{ai_response}\n\n📊 **Data Response:**\n{madrid_answer}"
-                                await update.message.reply_text(combined_response, parse_mode="Markdown")
+                                # Show actual data directly
+                                await update.message.reply_text(madrid_answer, parse_mode="Markdown")
                                 return
                         
                         # If no data found, show AI analysis with helpful guidance
@@ -336,8 +335,8 @@ class MadridistaBot:
                         
                     except Exception as e:
                         logger.warning(f"API call error after AI analysis: {e}")
-                        # Show AI analysis even if APIs fail
-                        await update.message.reply_text(f"{ai_response}\n\n⚠️ Data temporarily unavailable, but I understood your question!", parse_mode="Markdown")
+                        # Show AI analysis with helpful guidance when APIs fail
+                        await update.message.reply_text(f"{ai_response}\n\n💡 **Tip**: Use specific commands for faster results:\n• `/table` - for league tables\n• `/form [team]` - for recent form\n• `/next [team]` - for upcoming fixtures", parse_mode="Markdown")
                         return
                 
                 else:
