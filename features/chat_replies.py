@@ -1,13 +1,15 @@
 import os, time, re, random
 from telegram import Update
 from telegram.ext import ContextTypes
-from ai_engine.gpt_engine import banter_reply
+from ai_engine.gpt_engine import riff_short
+from utils.memory import get_context
+from media.media_lib import pick_media_for
 
 ENABLE = os.getenv("ENABLE_BANTER", "false").lower() == "true"
 GAP = int(os.getenv("BANTER_COOLDOWN_SEC", "45"))
 UGAP = int(os.getenv("BANTER_PER_USER_COOLDOWN_SEC", "120"))
 MAX_HOUR = int(os.getenv("BANTER_MAX_PER_HOUR", "15"))
-REPLY_PROB = float(os.getenv("BANTER_REPLY_PROB", "0.6"))
+REPLY_PROB = float(os.getenv("BANTER_REPLY_PROB", "0.55"))
 KW = [k.strip().lower() for k in os.getenv("BANTER_KEYWORDS", "").split(",") if k.strip()]
 RIVALS = [k.strip().lower() for k in os.getenv("BANTER_RIVALS", "").split(",") if k.strip()]
 
@@ -58,56 +60,81 @@ def _matches_keywords(text):
 
 def _too_toxic(text):
     # quick-and-dirty guard; keep it simple
-    banned = ["idiot","kill","die","trash","stupid","hate"]
+    banned = ["idiot","kill","die","trash","stupid","hate","racist"]
     t = text.lower()
     return any(b in t for b in banned)
+
+def _typing_delay_for(text):
+    L = len(text)
+    # ~human typing delay (shorter for small replies)
+    return min(3.5, 0.6 + 0.015 * L + random.random())
 
 async def chat_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not ENABLE:
         return
     msg = update.message
-    if not msg or not msg.text:
+    if not msg or not msg.text or msg.from_user.is_bot:
         return
+
     chat_id = update.effective_chat.id
     user_id = msg.from_user.id
-    
+    txt = msg.text.strip()
+
     # Check if banter is enabled for this specific chat
     if not context.application.bot_data.get(f"banter_enabled::{chat_id}", True):
         return
 
-    txt = msg.text.strip()
-    # Don't argue with ourselves
-    if msg.from_user.is_bot:
-        return
-    # Heuristic: skip long walls of text or forwarding
-    if len(txt) > 500:
-        return
-    # Basic trigger check
+    # trigger check
     if not _matches_keywords(txt):
-        # random small chance to chime in anyway if Madrid is mentioned vaguely
-        if random.random() > 0.05:
+        if random.random() > 0.05:  # occasional pop-in
             return
 
-    # Cooldown & cap
+    # cooldown
     if not _can_speak(context.application.bot_data, chat_id, user_id):
         return
     if random.random() > REPLY_PROB:
         return
 
-    # Build a small context: who said what
-    author = msg.from_user.first_name or "fan"
-    context_blob = f"{author} said: \"{txt}\""
+    # build short context window
+    turns = get_context(chat_id, k=6)
+    # Format context into a tiny transcript
+    convo = "\n".join([f"{a}: {t}" for (a, t) in turns[-5:]])
+    user_line = f"{msg.from_user.first_name}: {txt}"
+    transcript = (convo + ("\n" if convo else "") + user_line)[-1200:]
 
-    # Ask the LLM for a short banter line
-    reply = banter_reply(context_blob)
-    # Safety check on final output
+    # ask LLM for short witty reply
+    prompt = (
+        "You are a Real Madrid superfan in a Telegram group. "
+        "Reply with short, witty, human banter. 1 sentence, <=180 chars, no hashtags/links, light emojis ok.\n\n"
+        f"Conversation so far:\n{transcript}"
+    )
+    reply = riff_short(prompt, fallback="Calma… Champions DNA talks. 🤍", max_tokens=80)
     if _too_toxic(reply):
         reply = "Focus on football. 🤍"
 
-    # Reply to the message directly (threads visually)
+    # look human: typing action + small delay
     try:
-        await msg.reply_text(reply, reply_to_message_id=msg.message_id)
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+    except Exception:
+        pass
+
+    import asyncio
+    await asyncio.sleep(_typing_delay_for(reply))
+
+    # send reply (threaded)
+    try:
+        sent = await msg.reply_text(reply, reply_to_message_id=msg.message_id)
         _mark_spoke(context.application.bot_data, chat_id, user_id)
     except Exception:
-        # ignore failures
-        pass
+        return
+
+    # maybe attach a meme/gif, based on the message we replied to or our reply
+    media = pick_media_for(txt + " " + reply)
+    if media:
+        try:
+            if media["type"] == "gif":
+                await context.bot.send_animation(chat_id=chat_id, animation=media["url"], reply_to_message_id=sent.message_id)
+            else:
+                await context.bot.send_photo(chat_id=chat_id, photo=media["url"], reply_to_message_id=sent.message_id)
+        except Exception:
+            pass

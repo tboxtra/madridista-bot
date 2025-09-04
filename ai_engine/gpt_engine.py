@@ -66,3 +66,10 @@ def banter_reply(context_blob):
         return generate_short_post(prompt, max_chars=200)
     except Exception:
         return "Calma… champions DNA speaks for itself. 🤍"
+
+def riff_short(prompt, fallback="Calma… Champions DNA talks. 🤍", max_tokens=80):
+    """Generate a short, witty response for group chat"""
+    try:
+        return generate_short_post(prompt, max_chars=180)
+    except Exception:
+        return fallback

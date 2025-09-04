@@ -21,6 +21,9 @@ from features.news import news_handler
 from features.tv import tv_handler
 from features.chat_replies import chat_message_handler
 
+# Import memory system
+from utils.memory import push as mem_push
+
 # Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -70,8 +73,11 @@ class MadridistaTelegramBot:
         self.application.add_handler(CommandHandler("banteron", self.banteron_cmd))
         self.application.add_handler(CommandHandler("banteroff", self.banteroff_cmd))
         
+        # Memory tap handler (runs first to store messages)
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._tap_memory), group=0)
+        
         # Message handler for general conversation and smart banter
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message), group=10)
     
     def setup_live_monitoring(self):
         """Setup live monitoring job queue"""
@@ -125,6 +131,14 @@ class MadridistaTelegramBot:
         context.application.bot_data[f"banter_enabled::{chat_id}"] = False
         
         await update.message.reply_text("🤐 **Smart banter disabled for this chat.**\n\nI'll stay quiet and only respond to direct commands now.\n\nUse `/banteron` to re-enable the fun!")
+    
+    async def _tap_memory(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Memory tap handler - stores messages for conversational context"""
+        msg = update.message
+        if not msg or not msg.text or msg.from_user.is_bot:
+            return
+        author = msg.from_user.first_name or "fan"
+        mem_push(update.effective_chat.id, author, msg.text.strip())
     
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""

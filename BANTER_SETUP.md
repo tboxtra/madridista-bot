@@ -12,7 +12,15 @@ ENABLE_BANTER=true
 BANTER_COOLDOWN_SEC=45           # min gap between bot messages in a chat
 BANTER_PER_USER_COOLDOWN_SEC=120 # min gap per user
 BANTER_MAX_PER_HOUR=15           # per chat, to avoid spam
-BANTER_REPLY_PROB=0.6            # 0..1 random chance when triggered
+BANTER_REPLY_PROB=0.55           # 0..1 random chance when triggered
+```
+
+### **Memory & Media Settings:**
+```bash
+ENABLE_MEMORY=true
+MEMORY_WINDOW=20                  # how many recent msgs per chat to remember
+ENABLE_MEDIA=true
+MEDIA_REPLY_PROB=0.30            # chance to attach a meme/GIF when replying
 ```
 
 ### **Trigger Keywords:**
@@ -37,6 +45,13 @@ Now your bot can read all group messages and join conversations!
 - **Rivals**: "Barcelona", "Messi", "Barca"
 - **Mentions**: @YourBotName
 - **Random**: 5% chance to chime in on Madrid-related topics
+
+### **Human-Like Features:**
+- **Conversational Memory**: Remembers last 20 messages per chat
+- **Context-Aware**: Understands conversation flow
+- **Typing Delays**: Simulates human typing behavior
+- **Media Reactions**: Sometimes attaches memes/GIFs
+- **Threaded Replies**: Responds to specific messages
 
 ### **Safety Rails:**
 - **Cooldowns**: 45s between messages, 2min per user
