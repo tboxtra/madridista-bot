@@ -1,5 +1,5 @@
 import os, time, requests
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 
 BASE = "https://api.sofascore.com/api/v1"
 TEAM_ID = int(os.getenv("SOFA_TEAM_ID", "2817"))  # Real Madrid default
@@ -29,7 +29,7 @@ def _map_event(e: dict) -> Dict[str, Any]:
         "competition": comp or "",
     }
 
-def _map_incident(inc: dict, home_id: int | None, away_id: int | None) -> Dict[str, Any]:
+def _map_incident(inc: dict, home_id: Union[int, None], away_id: Union[int, None]) -> Dict[str, Any]:
     # Common types:
     # type: 'goal', 'yellow-card', 'red-card', 'substitution', 'var', 'period' etc.
     itype = inc.get("type")
@@ -83,7 +83,7 @@ def _map_incident(inc: dict, home_id: int | None, away_id: int | None) -> Dict[s
     }
 
 class SofaScoreProvider:
-    def __init__(self, team_id: int | None = None):
+    def __init__(self, team_id: Union[int, None] = None):
         self.team_id = int(team_id or TEAM_ID)
 
     def get_team_live_event(self) -> Optional[Dict[str, Any]]:
@@ -101,7 +101,7 @@ class SofaScoreProvider:
             print(f"SofaScore live event error: {e}")
             return None
 
-    def get_event_incidents(self, event_id) -> List[Dict[str, Any]]:
+    def get_event_incidents(self, event_id: Union[str, int]) -> List[Dict[str, Any]]:
         # /event/{id}/incidents
         try:
             data = _get(f"/event/{event_id}/incidents")

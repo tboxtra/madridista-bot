@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from utils.dedupe import DeDupe
 
 PROVIDER_NAME = os.getenv("LIVE_PROVIDER", "sofascore").lower()
@@ -33,7 +33,7 @@ def _format_incident_line(inc: Dict[str, Any]) -> str:
 
 async def monitor_tick(context) -> None:
     bot = context.application.bot
-    subs: set[int] = context.application.bot_data.get("subs", set())
+    subs: set = context.application.bot_data.get("subs", set())
     if not subs:
         return
 

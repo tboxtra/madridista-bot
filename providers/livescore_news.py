@@ -1,13 +1,14 @@
 import os, requests
-from typing import List, Dict
+from typing import List, Dict, Union
 
 HOST = os.getenv("LIVESCORE_RAPIDAPI_HOST", "livescore6.p.rapidapi.com")
 KEY  = os.getenv("LIVESCORE_RAPIDAPI_KEY")
 CAT  = os.getenv("NEWS_CATEGORY", "soccer")
 LIMIT = int(os.getenv("NEWS_LIMIT", "8"))
 
-if not KEY:
-    raise RuntimeError("Missing LIVESCORE_RAPIDAPI_KEY")
+# Make this optional for bot startup
+# if not KEY:
+#     raise RuntimeError("Missing LIVESCORE_RAPIDAPI_KEY")
 
 S = requests.Session()
 S.headers.update({
@@ -17,7 +18,10 @@ S.headers.update({
     "user-agent": "MadridistaBot/1.0"
 })
 
-def fetch_news_raw(category: str | None = None) -> Dict:
+def fetch_news_raw(category: Union[str, None] = None) -> Dict:
+    if not KEY:
+        return {"error": "Missing LIVESCORE_RAPIDAPI_KEY"}
+    
     cat = (category or CAT).strip().lower()
     url = f"https://{HOST}/news/list"
     r = S.get(url, params={"category": cat}, timeout=20)

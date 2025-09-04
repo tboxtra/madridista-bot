@@ -79,7 +79,7 @@ class MadridistaTelegramBot:
     
     async def enablelive_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /enablelive command - subscribe to live updates"""
-        subs: set[int] = context.application.bot_data.setdefault("subs", set(load_subs()))
+        subs: set = context.application.bot_data.setdefault("subs", set(load_subs()))
         chat_id = update.effective_chat.id
         subs.add(chat_id)
         save_subs(subs)
@@ -89,7 +89,7 @@ class MadridistaTelegramBot:
     
     async def disablelive_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /disablelive command - unsubscribe from live updates"""
-        subs: set[int] = context.application.bot_data.setdefault("subs", set(load_subs()))
+        subs: set = context.application.bot_data.setdefault("subs", set(load_subs()))
         chat_id = update.effective_chat.id
         subs.discard(chat_id)
         save_subs(subs)

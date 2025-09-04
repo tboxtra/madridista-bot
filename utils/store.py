@@ -7,7 +7,7 @@ def _ensure_dir():
     d = os.path.dirname(_PATH) or "."
     os.makedirs(d, exist_ok=True)
 
-def load_subs() -> set[int]:
+def load_subs() -> set:
     _ensure_dir()
     if not os.path.exists(_PATH):
         return set()
@@ -17,7 +17,7 @@ def load_subs() -> set[int]:
     except Exception:
         return set()
 
-def save_subs(subs: set[int]) -> None:
+def save_subs(subs: set) -> None:
     _ensure_dir()
     with _LOCK:
         with open(_PATH, "w", encoding="utf-8") as f:
