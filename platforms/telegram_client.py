@@ -46,6 +46,7 @@ class MadridistaTelegramBot:
         self.application.add_handler(CommandHandler("matches", self.matches_command))
         self.application.add_handler(CommandHandler("standings", self.standings_command))
         self.application.add_handler(CommandHandler("achievements", self.achievements_command))
+        self.application.add_handler(CommandHandler("status", self.status_command))
         
         # Message handler for general conversation
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
@@ -62,6 +63,7 @@ class MadridistaTelegramBot:
             "/matches - Recent and upcoming matches\n"
             "/standings - La Liga standings\n"
             "/achievements - Recent achievements\n"
+            "/status - Check data source status\n"
             "/help - Show this help message\n\n"
             "Just chat with me about Real Madrid! Ask me anything about the club, players, history, or current events."
         )
@@ -78,6 +80,7 @@ class MadridistaTelegramBot:
             "/matches - Recent and upcoming matches\n"
             "/standings - La Liga standings\n"
             "/achievements - Recent achievements\n"
+            "/status - Check data source status\n"
             "/help - Show this help message\n\n"
             "You can also just chat with me about Real Madrid!"
         )
@@ -109,8 +112,9 @@ class MadridistaTelegramBot:
             club_info = await self.football_api.get_real_madrid_info()
             
             if club_info:
+                source_indicator = "🟢 Live Data" if club_info.get('source') == 'Live API' else "🟡 Fallback Data"
                 madrid_info = (
-                    f"🏆 **{club_info.get('name', 'Real Madrid')}** 🏆\n\n"
+                    f"🏆 **{club_info.get('name', 'Real Madrid')}** {source_indicator} 🏆\n\n"
                     f"Founded: {club_info.get('founded', 1902)}\n"
                     f"Stadium: {club_info.get('venue', 'Santiago Bernabéu')}\n"
                     f"Colors: {club_info.get('colors', 'White and Gold')}\n"
@@ -144,7 +148,8 @@ class MadridistaTelegramBot:
             squad = await self.football_api.get_real_madrid_squad()
             
             if squad:
-                squad_text = "🤍 **Real Madrid Current Squad** 🤍\n\n"
+                source_indicator = "🟢 Live Data" if squad[0].get('source') == 'Live API' else "🟡 Fallback Data"
+                squad_text = f"🤍 **Real Madrid Current Squad** {source_indicator} 🤍\n\n"
                 
                 # Group by position
                 positions = {}
@@ -221,6 +226,51 @@ class MadridistaTelegramBot:
         except Exception as e:
             logger.error(f"Error in achievements command: {e}")
             await update.message.reply_text("¡Hala Madrid! 🤍")
+    
+    async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /status command - show data source status"""
+        try:
+            # Check API key status
+            football_data_key = os.getenv('FOOTBALL_DATA_API_KEY')
+            api_football_key = os.getenv('API_FOOTBALL_KEY')
+            
+            status_text = "📊 **MadridistaAI Data Source Status** 📊\n\n"
+            
+            # Football-Data.org status
+            if football_data_key:
+                status_text += "🟢 **Football-Data.org API**: Configured\n"
+                status_text += "   • Live squad data available\n"
+                status_text += "   • Live match results available\n"
+                status_text += "   • Live standings available\n\n"
+            else:
+                status_text += "🟡 **Football-Data.org API**: Not configured\n"
+                status_text += "   • Using fallback data\n"
+                status_text += "   • Get free API key at: football-data.org\n\n"
+            
+            # API-Football status
+            if api_football_key:
+                status_text += "🟢 **API-Football**: Configured\n"
+                status_text += "   • Additional data available\n\n"
+            else:
+                status_text += "🟡 **API-Football**: Not configured\n"
+                status_text += "   • Get free API key at: api-football.com\n\n"
+            
+            # OpenAI status
+            openai_key = os.getenv('OPENAI_API_KEY')
+            if openai_key:
+                status_text += "🟢 **OpenAI API**: Configured\n"
+                status_text += "   • AI-powered responses available\n\n"
+            else:
+                status_text += "🔴 **OpenAI API**: Not configured\n"
+                status_text += "   • AI responses will not work\n\n"
+            
+            status_text += "💡 **To get live data, add API keys to Railway environment variables**"
+            
+            await update.message.reply_text(status_text)
+            
+        except Exception as e:
+            logger.error(f"Error in status command: {e}")
+            await update.message.reply_text("Error checking status!")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle general messages about Real Madrid with intelligent responses"""
