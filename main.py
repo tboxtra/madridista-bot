@@ -289,43 +289,42 @@ class MadridistaBot:
         )
     
     async def handle_message(self, update, context):
-        """Handle general messages about Real Madrid"""
+        """Handle general messages - prioritize football router for all football questions"""
         user_message = update.message.text.lower()
         
-        # Check if message is about Real Madrid
+        # Check if this is a fixture/match question and redirect to real data
+        if any(word in user_message for word in ['next', 'upcoming', 'when', 'fixture', 'match', 'game', 'schedule']):
+            await self.matches_cmd(update, context)
+            return
+        
+        # Try to route to football questions FIRST (covers ALL football, not just Madrid)
+        try:
+            from features.router_football import route_football
+            football_answer = route_football(update.message.text)
+            if football_answer:
+                await update.message.reply_text(football_answer, parse_mode="Markdown")
+                return
+        except Exception as e:
+            logger.warning(f"Football router error: {e}")
+        
+        # Then try Madrid-specific handlers (injuries, squad, etc.)
+        try:
+            from features.router_extra import route_related
+            specific_answer = route_related(update.message.text)
+            if specific_answer:
+                await update.message.reply_text(specific_answer, parse_mode="Markdown")
+                return
+        except Exception as e:
+            logger.warning(f"Madrid router error: {e}")
+        
+        # Check if message is about Real Madrid for fallback response
         madrid_keywords = ['madrid', 'real madrid', 'bernabeu', 'hala madrid', 'cr7', 'ronaldo', 
                           'vinicius', 'vini', 'benzema', 'modric', 'kroos', 'carlo', 'ancelotti', 
                           'champions', 'liga', 'barcelona', 'atletico', 'sevilla', 'valencia', 
                           'squad', 'team', 'players', 'matches', 'games', 'season', 'transfer', 'news']
         
         if any(keyword in user_message for keyword in madrid_keywords):
-            # Check if this is a fixture/match question and redirect to real data
-            if any(word in user_message for word in ['next', 'upcoming', 'when', 'fixture', 'match', 'game', 'schedule']):
-                await self.matches_cmd(update, context)
-                return
-            
-            # Try to route to football questions first (covers all football)
-            try:
-                from features.router_football import route_football
-                football_answer = route_football(update.message.text)
-                if football_answer:
-                    await update.message.reply_text(football_answer, parse_mode="Markdown")
-                    return
-            except Exception as e:
-                logger.warning(f"Football router error: {e}")
-            
-            # Then try Madrid-specific handlers (injuries, squad, etc.)
-            try:
-                from features.router_extra import route_related
-                specific_answer = route_related(update.message.text)
-                if specific_answer:
-                    await update.message.reply_text(specific_answer, parse_mode="Markdown")
-                    return
-            except Exception as e:
-                logger.warning(f"Madrid router error: {e}")
-                # Continue to fallback response
-            
-            # Generate a relevant response
+            # Generate a relevant response for Madrid-related questions
             response = "¡Hala Madrid! ⚽🤍 What would you like to know about Real Madrid? Use /matches for fixtures or /live for match status!"
             await update.message.reply_text(response)
         else:
