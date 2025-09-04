@@ -139,7 +139,7 @@ class MadridistaTelegramBot:
         await update.message.reply_text("🤐 **Smart banter disabled for this chat.**\n\nI'll stay quiet and only respond to direct commands now.\n\nUse `/banteron` to re-enable the fun!")
     
     async def analyze_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /analyze command - advanced AI analysis using GPT-4o"""
+        """Handle /analyze command - advanced AI analysis using GPT-5"""
         try:
             if not context.args:
                 await update.message.reply_text(
@@ -149,12 +149,12 @@ class MadridistaTelegramBot:
                     "• `/analyze Why is Vinicius so effective this season?`\n"
                     "• `/analyze Compare Real Madrid's tactics to Barcelona's`\n"
                     "• `/analyze How has Ancelotti improved the team?`\n\n"
-                    "Powered by GPT-4o for deep insights! 🤖⚽"
+                    "Powered by GPT-5 for deep insights! 🤖⚽"
                 )
                 return
             
             question = " ".join(context.args)
-            await update.message.reply_text("🧠 **Analyzing with GPT-4o...**\n\nThis may take a moment for detailed insights.")
+            await update.message.reply_text("🧠 **Analyzing with GPT-5...**\n\nThis may take a moment for detailed insights.")
             
             # Get conversation context
             chat_id = update.effective_chat.id
@@ -200,7 +200,7 @@ class MadridistaTelegramBot:
             "/disablelive - Unsubscribe from live updates\n"
             "/banteron - Enable smart banter in this chat\n"
             "/banteroff - Disable smart banter in this chat\n"
-            "/analyze - Advanced AI analysis with GPT-4o\n"
+            "/analyze - Advanced AI analysis with GPT-5\n"
             "/help - Show this help message\n\n"
             "Just chat with me about Real Madrid! Ask me anything about the club, players, history, or current events."
         )
@@ -226,7 +226,7 @@ class MadridistaTelegramBot:
             "/disablelive - Unsubscribe from live updates\n"
             "/banteron - Enable smart banter in this chat\n"
             "/banteroff - Disable smart banter in this chat\n"
-            "/analyze - Advanced AI analysis with GPT-4o\n"
+            "/analyze - Advanced AI analysis with GPT-5\n"
             "/help - Show this help message\n\n"
             "You can also just chat with me about Real Madrid!"
         )

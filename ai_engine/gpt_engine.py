@@ -47,7 +47,7 @@ def generate_short_post(user_prompt: str, max_chars: int = 240) -> str:
 
     try:
         resp = client.chat.completions.create(
-            model="gpt-4o",  # Latest and most capable model
+            model="gpt-5",  # Latest and most advanced model
             messages=messages,
             temperature=0.7,  # Slightly lower for more consistent responses
             max_tokens=150,  # plenty for ~200 characters
@@ -56,10 +56,10 @@ def generate_short_post(user_prompt: str, max_chars: int = 240) -> str:
         )
         return resp.choices[0].message.content.strip()
     except Exception as e:
-        # Fallback to GPT-3.5-turbo if GPT-4o fails
+        # Fallback to GPT-4o if GPT-5 fails
         try:
             resp = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=150,
@@ -83,7 +83,7 @@ def banter_reply(context_blob):
         return "Calma… champions DNA speaks for itself. 🤍"
 
 def riff_short(prompt, fallback="Calma… Champions DNA talks. 🤍", max_tokens=80):
-    """Generate a short, witty response for group chat using latest GPT-4o"""
+    """Generate a short, witty response for group chat using latest GPT-5"""
     try:
         return generate_short_post(prompt, max_chars=180)
     except Exception:
@@ -91,7 +91,7 @@ def riff_short(prompt, fallback="Calma… Champions DNA talks. 🤍", max_tokens
 
 def analyze_madrid_context(context: str, question: str) -> str:
     """
-    Advanced analysis using GPT-4o for complex Real Madrid questions.
+    Advanced analysis using GPT-5 for complex Real Madrid questions.
     Better reasoning, fact-checking, and detailed responses.
     """
     try:
@@ -118,7 +118,7 @@ def analyze_madrid_context(context: str, question: str) -> str:
         ]
         
         resp = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5",
             messages=messages,
             temperature=0.3,  # Lower for more factual responses
             max_tokens=200,
@@ -128,13 +128,15 @@ def analyze_madrid_context(context: str, question: str) -> str:
         return resp.choices[0].message.content.strip()
         
     except Exception as e:
-        # Fallback to GPT-3.5-turbo
+        # Fallback to GPT-4o
         try:
             resp = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o",
                 messages=messages,
                 temperature=0.3,
                 max_tokens=200,
+                response_format={"type": "text"},
+                seed=42,
             )
             return resp.choices[0].message.content.strip()
         except Exception:
