@@ -178,6 +178,7 @@ class FootballAPIService:
                                 time_diff_minutes = (match_date_local - now).total_seconds() / 60
                                 
                                 processed_matches.append({
+                                    'id': match.get('id', ''),  # Add match ID for live updates
                                     'home_team': match.get('homeTeam', {}).get('name', ''),
                                     'away_team': match.get('awayTeam', {}).get('name', ''),
                                     'home_score': match.get('score', {}).get('fullTime', {}).get('home'),
@@ -364,3 +365,179 @@ class FootballAPIService:
             result += f"{i}. {team['team']} - {team['points']} pts ({team['played']}P {team['won']}W {team['drawn']}D {team['lost']}L)\n"
         
         return result
+
+    async def get_live_match_updates(self, match_id: str = None) -> Dict[str, Any]:
+        """Get live match updates and commentary data"""
+        if not self.football_data_key:
+            logger.info("No API key - returning fallback live data")
+            return self._get_fallback_live_data()
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                headers = {'X-Auth-Token': self.football_data_key}
+                
+                # If no specific match, get Real Madrid's live matches
+                if not match_id:
+                    matches = await self.get_real_madrid_matches(limit=10)
+                    live_matches = [m for m in matches if m.get('status') == 'LIVE']
+                    if not live_matches:
+                        return {'status': 'no_live_matches', 'message': 'No live matches currently'}
+                    
+                    match_id = live_matches[0].get('id')
+                
+                # Get detailed match data
+                match_url = f"{self.football_data_base}/matches/{match_id}"
+                async with session.get(match_url, headers=headers) as response:
+                    if response.status == 200:
+                        match_data = await response.json()
+                        
+                        # Extract live information
+                        live_info = {
+                            'match_id': match_id,
+                            'home_team': match_data.get('homeTeam', {}).get('name', ''),
+                            'away_team': match_data.get('awayTeam', {}).get('name', ''),
+                            'home_score': match_data.get('score', {}).get('fullTime', {}).get('home', 0),
+                            'away_score': match_data.get('score', {}).get('fullTime', {}).get('home', 0),
+                            'minute': match_data.get('minute', 0),
+                            'status': match_data.get('status', ''),
+                            'competition': match_data.get('competition', {}).get('name', ''),
+                            'venue': match_data.get('venue', ''),
+                            'last_updated': datetime.now().isoformat(),
+                            'source': 'Live API'
+                        }
+                        
+                        # Add match events if available
+                        if 'goals' in match_data:
+                            live_info['goals'] = match_data['goals']
+                        if 'bookings' in match_data:
+                            live_info['bookings'] = match_data['bookings']
+                        if 'substitutions' in match_data:
+                            live_info['substitutions'] = match_data['substitutions']
+                        
+                        logger.info(f"Successfully fetched live match updates for {live_info['home_team']} vs {live_info['away_team']}")
+                        return live_info
+                    else:
+                        logger.warning(f"API returned status {response.status}")
+                        return self._get_fallback_live_data()
+        except Exception as e:
+            logger.error(f"Error fetching live match updates: {e}")
+            return self._get_fallback_live_data()
+    
+    async def get_transfer_news(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """Get latest transfer news and rumors"""
+        if not self.football_data_key:
+            logger.info("No API key - returning fallback transfer news")
+            return self._get_fallback_transfer_news()
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                headers = {'X-Auth-Token': self.football_data_key}
+                
+                # Get transfer news from competitions
+                news_url = f"{self.football_data_base}/competitions/{self.la_liga_id}/news"
+                params = {'limit': limit * 2}  # Get more to filter for Madrid-related news
+                
+                async with session.get(news_url, headers=headers, params=params) as response:
+                    if response.status == 200:
+                        news_data = await response.json()
+                        articles = news_data.get('articles', [])
+                        
+                        # Filter for Real Madrid related news
+                        madrid_news = []
+                        for article in articles:
+                            title = article.get('title', '').lower()
+                            content = article.get('content', '').lower()
+                            
+                            # Check if article mentions Real Madrid or related terms
+                            madrid_keywords = ['real madrid', 'madrid', 'bernabeu', 'ancelotti', 'vinicius', 'bellingham', 'mbappe']
+                            if any(keyword in title or keyword in content for keyword in madrid_keywords):
+                                madrid_news.append({
+                                    'title': article.get('title', ''),
+                                    'summary': article.get('summary', ''),
+                                    'url': article.get('url', ''),
+                                    'published_at': article.get('publishedAt', ''),
+                                    'source': 'Live API'
+                                })
+                        
+                        logger.info(f"Found {len(madrid_news)} Madrid-related news articles")
+                        return madrid_news[:limit]
+                    else:
+                        logger.warning(f"API returned status {response.status}")
+                        return self._get_fallback_transfer_news()
+        except Exception as e:
+            logger.error(f"Error fetching transfer news: {e}")
+            return self._get_fallback_transfer_news()
+    
+    async def get_match_highlights(self, match_id: str) -> Dict[str, Any]:
+        """Get match highlights and key moments"""
+        if not self.football_data_key:
+            logger.info("No API key - returning fallback highlights")
+            return self._get_fallback_highlights()
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                headers = {'X-Auth-Token': self.football_data_key}
+                
+                # Get match highlights
+                highlights_url = f"{self.football_data_base}/matches/{match_id}/highlights"
+                async with session.get(highlights_url, headers=headers) as response:
+                    if response.status == 200:
+                        highlights_data = await response.json()
+                        
+                        highlights = {
+                            'match_id': match_id,
+                            'goals': highlights_data.get('goals', []),
+                            'key_moments': highlights_data.get('keyMoments', []),
+                            'cards': highlights_data.get('cards', []),
+                            'substitutions': highlights_data.get('substitutions', []),
+                            'source': 'Live API'
+                        }
+                        
+                        logger.info(f"Successfully fetched highlights for match {match_id}")
+                        return highlights
+                    else:
+                        logger.warning(f"API returned status {response.status}")
+                        return self._get_fallback_highlights()
+        except Exception as e:
+            logger.error(f"Error fetching match highlights: {e}")
+            return self._get_fallback_highlights()
+    
+    def _get_fallback_live_data(self) -> Dict[str, Any]:
+        """Get fallback live match data"""
+        return {
+            'status': 'fallback',
+            'message': 'Live data temporarily unavailable',
+            'home_team': 'Real Madrid',
+            'away_team': 'Opponent',
+            'home_score': 0,
+            'away_score': 0,
+            'minute': 0,
+            'status': 'LIVE',
+            'competition': 'La Liga',
+            'venue': 'Santiago Bernabéu',
+            'last_updated': datetime.now().isoformat(),
+            'source': 'Fallback Data'
+        }
+    
+    def _get_fallback_transfer_news(self) -> List[Dict[str, Any]]:
+        """Get fallback transfer news"""
+        return [
+            {
+                'title': 'Real Madrid Transfer Update',
+                'summary': 'Transfer news temporarily unavailable. Check back soon for latest updates.',
+                'url': '',
+                'published_at': datetime.now().isoformat(),
+                'source': 'Fallback Data'
+            }
+        ]
+    
+    def _get_fallback_highlights(self) -> Dict[str, Any]:
+        """Get fallback match highlights"""
+        return {
+            'match_id': 'unknown',
+            'goals': [],
+            'key_moments': [],
+            'cards': [],
+            'substitutions': [],
+            'source': 'Fallback Data'
+        }

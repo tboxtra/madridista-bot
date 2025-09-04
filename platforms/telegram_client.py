@@ -47,6 +47,9 @@ class MadridistaTelegramBot:
         self.application.add_handler(CommandHandler("standings", self.standings_command))
         self.application.add_handler(CommandHandler("achievements", self.achievements_command))
         self.application.add_handler(CommandHandler("status", self.status_command))
+        self.application.add_handler(CommandHandler("live", self.live_command))
+        self.application.add_handler(CommandHandler("news", self.news_command))
+        self.application.add_handler(CommandHandler("highlights", self.highlights_command))
         
         # Message handler for general conversation
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
@@ -64,6 +67,9 @@ class MadridistaTelegramBot:
             "/standings - La Liga standings\n"
             "/achievements - Recent achievements\n"
             "/status - Check data source status\n"
+            "/live - Live match updates\n"
+            "/news - Latest transfer news\n"
+            "/highlights - Match highlights\n"
             "/help - Show this help message\n\n"
             "Just chat with me about Real Madrid! Ask me anything about the club, players, history, or current events."
         )
@@ -81,6 +87,9 @@ class MadridistaTelegramBot:
             "/standings - La Liga standings\n"
             "/achievements - Recent achievements\n"
             "/status - Check data source status\n"
+            "/live - Live match updates\n"
+            "/news - Latest transfer news\n"
+            "/highlights - Match highlights\n"
             "/help - Show this help message\n\n"
             "You can also just chat with me about Real Madrid!"
         )
@@ -275,7 +284,10 @@ class MadridistaTelegramBot:
                 status_text += "🟢 **Football-Data.org API**: Configured\n"
                 status_text += "   • Live squad data available\n"
                 status_text += "   • Live match results available\n"
-                status_text += "   • Live standings available\n\n"
+                status_text += "   • Live standings available\n"
+                status_text += "   • Live match updates available\n"
+                status_text += "   • Transfer news available\n"
+                status_text += "   • Match highlights available\n\n"
             else:
                 status_text += "🟡 **Football-Data.org API**: Not configured\n"
                 status_text += "   • Using fallback data\n"
@@ -305,6 +317,155 @@ class MadridistaTelegramBot:
         except Exception as e:
             logger.error(f"Error in status command: {e}")
             await update.message.reply_text("Error checking status!")
+    
+    async def live_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /live command - show live match updates"""
+        try:
+            await update.message.reply_text("Checking for live matches... 🔴")
+            
+            live_updates = await self.football_api.get_live_match_updates()
+            
+            if live_updates.get('status') == 'no_live_matches':
+                await update.message.reply_text("🔴 **No live matches currently**\n\nNo Real Madrid matches are happening right now. Check `/matches` for upcoming fixtures!")
+                return
+            
+            if live_updates.get('source') == 'Live API':
+                live_text = f"🔴 **LIVE MATCH UPDATES** 🔴\n\n"
+                live_text += f"**{live_updates['home_team']} vs {live_updates['away_team']}**\n"
+                live_text += f"**Score: {live_updates['home_score']} - {live_updates['away_score']}**\n"
+                live_text += f"**Minute: {live_updates['minute']}'**\n"
+                live_text += f"**Competition: {live_updates['competition']}**\n"
+                live_text += f"**Venue: {live_updates['venue']}**\n\n"
+                
+                # Add live events if available
+                if live_updates.get('goals'):
+                    live_text += "⚽ **Recent Goals:**\n"
+                    for goal in live_updates['goals'][-3:]:  # Show last 3 goals
+                        live_text += f"• {goal.get('minute', '')}' - {goal.get('scorer', {}).get('name', 'Unknown')}\n"
+                    live_text += "\n"
+                
+                if live_updates.get('bookings'):
+                    live_text += "🟨 **Recent Cards:**\n"
+                    for card in live_updates['bookings'][-3:]:  # Show last 3 cards
+                        live_text += f"• {card.get('minute', '')}' - {card.get('player', {}).get('name', 'Unknown')} ({card.get('card', 'Unknown')})\n"
+                    live_text += "\n"
+                
+                live_text += f"📅 **Data Source**: Live from Football-Data.org\n"
+                live_text += f"🕐 **Last Updated**: {live_updates.get('last_updated', 'Recent')}\n"
+                
+                await update.message.reply_text(live_text)
+            else:
+                # Fallback data
+                live_text = f"🔴 **LIVE MATCH STATUS** 🔴\n\n"
+                live_text += f"**{live_updates['home_team']} vs {live_updates['away_team']}**\n"
+                live_text += f"**Score: {live_updates['home_score']} - {live_updates['away_score']}**\n"
+                live_text += f"**Status: {live_updates['status']}**\n"
+                live_text += f"**Competition: {live_updates['competition']}**\n\n"
+                live_text += f"📅 **Data Source**: Fallback data\n"
+                
+                await update.message.reply_text(live_text)
+                
+        except Exception as e:
+            logger.error(f"Error in live command: {e}")
+            await update.message.reply_text("Sorry, couldn't fetch live updates right now!")
+    
+    async def news_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /news command - show latest transfer news and updates"""
+        try:
+            await update.message.reply_text("Fetching latest Real Madrid news... 📰")
+            
+            news = await self.football_api.get_transfer_news(limit=5)
+            
+            if news and len(news) > 0:
+                news_text = f"📰 **Latest Real Madrid News** 📰\n\n"
+                
+                for i, article in enumerate(news, 1):
+                    source_indicator = "🟢" if article.get('source') == 'Live API' else "🟡"
+                    news_text += f"{source_indicator} **{i}. {article['title']}**\n"
+                    
+                    if article.get('summary'):
+                        summary = article['summary'][:100] + "..." if len(article['summary']) > 100 else article['summary']
+                        news_text += f"   {summary}\n"
+                    
+                    if article.get('published_at'):
+                        try:
+                            from datetime import datetime
+                            pub_date = datetime.fromisoformat(article['published_at'].replace('Z', '+00:00'))
+                            news_text += f"   📅 {pub_date.strftime('%d %b %Y')}\n"
+                        except:
+                            pass
+                    
+                    news_text += "\n"
+                
+                # Add data source info
+                if news[0].get('source') == 'Live API':
+                    news_text += f"📅 **Data Source**: Live from Football-Data.org\n"
+                else:
+                    news_text += f"📅 **Data Source**: Fallback data\n"
+                
+                await update.message.reply_text(news_text)
+            else:
+                await update.message.reply_text("No news available right now. Check back later!")
+                
+        except Exception as e:
+            logger.error(f"Error in news command: {e}")
+            await update.message.reply_text("Sorry, couldn't fetch news right now!")
+    
+    async def highlights_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /highlights command - show match highlights"""
+        try:
+            await update.message.reply_text("Fetching match highlights... 🎥")
+            
+            # Get recent matches to find one for highlights
+            matches = await self.football_api.get_real_madrid_matches(limit=3)
+            
+            if matches and len(matches) > 0:
+                # Find a finished match
+                finished_matches = [m for m in matches if m.get('status') == 'FINISHED']
+                
+                if finished_matches:
+                    match = finished_matches[0]
+                    match_id = match.get('id', '')
+                    
+                    if match_id:
+                        highlights = await self.football_api.get_match_highlights(match_id)
+                        
+                        if highlights and highlights.get('source') == 'Live API':
+                            highlights_text = f"🎥 **Match Highlights** 🎥\n\n"
+                            highlights_text += f"**{match['home_team']} vs {match['away_team']}**\n"
+                            highlights_text += f"**Final Score: {match['home_score']} - {match['away_score']}**\n\n"
+                            
+                            if highlights.get('goals'):
+                                highlights_text += "⚽ **Goals:**\n"
+                                for goal in highlights['goals']:
+                                    highlights_text += f"• {goal.get('minute', '')}' - {goal.get('scorer', {}).get('name', 'Unknown')}\n"
+                                highlights_text += "\n"
+                            
+                            if highlights.get('key_moments'):
+                                highlights_text += "🔑 **Key Moments:**\n"
+                                for moment in highlights['key_moments']:
+                                    highlights_text += f"• {moment.get('minute', '')}' - {moment.get('description', 'Unknown')}\n"
+                                highlights_text += "\n"
+                            
+                            highlights_text += f"📅 **Data Source**: Live from Football-Data.org\n"
+                        else:
+                            highlights_text = f"🎥 **Match Summary** 🎥\n\n"
+                            highlights_text += f"**{match['home_team']} vs {match['away_team']}**\n"
+                            highlights_text += f"**Final Score: {match['home_score']} - {match['away_score']}**\n"
+                            highlights_text += f"**Competition: {match['competition']}**\n\n"
+                            highlights_text += f"📅 **Data Source**: Fallback data\n"
+                        
+                        await update.message.reply_text(highlights_text)
+                    else:
+                        await update.message.reply_text("No match ID available for highlights.")
+                else:
+                    await update.message.reply_text("No recent finished matches available for highlights.")
+            else:
+                await update.message.reply_text("No match data available for highlights.")
+                
+        except Exception as e:
+            logger.error(f"Error in highlights command: {e}")
+            await update.message.reply_text("Sorry, couldn't fetch highlights right now!")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle general messages about Real Madrid with intelligent responses"""
@@ -337,7 +498,7 @@ class MadridistaTelegramBot:
                 
                 elif any(comp in user_message for comp in ['liga', 'la liga', 'spanish league']):
                     comp_info = get_competition_info("la liga")
-                    response = f"🏆 **{comp_info['name']}**\nMadrid has won {comp_info['madrid_titles']} titles!\n{comp_info['teams']} teams, {comp_info['matches']} matches per season"
+                    response = f"🏆 **{comp_info['name']}**\nMadrid has won {comp_info['madrid_titles']} titles!\n{teams} teams, {comp_info['matches']} matches per season"
                     await update.message.reply_text(response)
                     return
                 
@@ -352,6 +513,14 @@ class MadridistaTelegramBot:
                 
                 elif any(word in user_message for word in ['standings', 'table', 'position', 'points']):
                     await self.standings_command(update, context)
+                    return
+                
+                elif any(word in user_message for word in ['live', 'now', 'happening']):
+                    await self.live_command(update, context)
+                    return
+                
+                elif any(word in user_message for word in ['news', 'transfer', 'rumors', 'updates']):
+                    await self.news_command(update, context)
                     return
                 
                 # Check for banter opportunities
