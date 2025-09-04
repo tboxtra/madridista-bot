@@ -46,7 +46,7 @@ class MadridistaTelegramBot:
             "/tweet - Generate a Real Madrid tweet\n"
             "/madrid - Get Real Madrid info\n"
             "/help - Show this help message\n\n"
-            "Just chat with me about Real Madrid!"
+            "Just chat with me about Real Madrid! Ask me anything about the club, players, history, or current events."
         )
         await update.message.reply_text(welcome_message)
     
@@ -94,25 +94,35 @@ class MadridistaTelegramBot:
         await update.message.reply_text(madrid_info)
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle general messages about Real Madrid"""
+        """Handle general messages about Real Madrid with intelligent responses"""
         user_message = update.message.text.lower()
         
         # Check if message is about Real Madrid
-        madrid_keywords = ['madrid', 'real madrid', 'bernabeu', 'hala madrid', 'cr7', 'ronaldo', 'vinicius', 'vini', 'benzema', 'modric', 'kroos', 'carlo', 'ancelotti']
+        madrid_keywords = ['madrid', 'real madrid', 'bernabeu', 'hala madrid', 'cr7', 'ronaldo', 'vinicius', 'vini', 'benzema', 'modric', 'kroos', 'carlo', 'ancelotti', 'champions', 'liga', 'barcelona', 'atletico', 'sevilla', 'valencia']
         
         if any(keyword in user_message for keyword in madrid_keywords):
             try:
-                # Generate a relevant response
-                prompt = random.choice(PROMPTS)
-                response = generate_short_post(prompt, max_chars=150)
+                # Create a context-aware prompt based on user's message
+                context_prompt = f"User asked: {update.message.text}\n\nGenerate a helpful, informative response about Real Madrid that directly addresses what they're asking. Keep it conversational and engaging."
+                
+                # Generate a relevant response using the user's actual question
+                response = generate_short_post(context_prompt, max_chars=200)
                 
                 await update.message.reply_text(f"⚽ {response}")
             except Exception as e:
                 logger.error(f"Error generating response: {e}")
-                await update.message.reply_text("¡Hala Madrid! 🤍")
+                # Fallback to a more specific response based on keywords
+                if 'cr7' in user_message or 'ronaldo' in user_message:
+                    await update.message.reply_text("⚽ Cristiano Ronaldo is a Real Madrid legend! He won 4 Champions League titles with us and scored 450+ goals. What would you like to know about CR7?")
+                elif 'vinicius' in user_message or 'vini' in user_message:
+                    await update.message.reply_text("⚽ Vinícius Jr. is our current superstar! He's been incredible this season with his pace and skill. What about Vini interests you?")
+                elif 'champions' in user_message:
+                    await update.message.reply_text("🏆 Real Madrid has won 14 Champions League titles - more than any other club! We're the kings of Europe! What would you like to know about our European success?")
+                else:
+                    await update.message.reply_text("¡Hala Madrid! 🤍 I'd love to help you with that Real Madrid question. Could you be more specific about what you'd like to know?")
         else:
-            # Generic response for non-Madrid topics
-            await update.message.reply_text("¡Hala Madrid! Let's talk about Real Madrid! ⚽🤍")
+            # For non-Madrid topics, guide them to Real Madrid conversation
+            await update.message.reply_text("¡Hala Madrid! ⚽🤍 I'm your Real Madrid companion! Let's talk about the greatest club in the world. Ask me about players, history, matches, or anything Real Madrid related!")
     
     def run(self):
         """Start the bot"""

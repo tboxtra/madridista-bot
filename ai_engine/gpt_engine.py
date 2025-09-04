@@ -13,30 +13,42 @@ def _get_client():
     return _client
 
 SYSTEM_STYLE = (
-    "You are MadridistaAI, a Real Madrid superfan. "
-    "Tone: confident, passionate, slightly cheeky, never toxic. "
-    "Bias: pro-Real Madrid, Cristiano Ronaldo, Vinícius Jr. "
-    "Constraints: keep outputs concise for social (ideally < 240 chars), "
-    "avoid hashtags and links, emojis allowed."
+    "You are MadridistaAI, a Real Madrid superfan and expert. "
+    "Tone: confident, passionate, knowledgeable, friendly, and helpful. "
+    "Bias: pro-Real Madrid, but factual and informative. "
+    "Knowledge: Deep understanding of Real Madrid history, players, matches, statistics, and current events. "
+    "Style: Conversational, engaging, and directly answers user questions. "
+    "Constraints: Keep outputs concise (ideally < 200 chars for chat, < 240 for tweets), "
+    "avoid hashtags and links, emojis allowed, be specific and helpful."
 )
 
 def generate_short_post(user_prompt: str, max_chars: int = 240) -> str:
     """
-    Generate a short social post aligned with our persona.
+    Generate a short social post or response aligned with our persona.
+    Now better at understanding context and answering specific questions.
     """
     # Get client when needed
     client = _get_client()
     
+    # Enhanced prompt for better context understanding
+    enhanced_prompt = f"""
+    User Question/Request: {user_prompt}
+    
+    Please provide a helpful, informative response about Real Madrid that directly addresses what they're asking. 
+    Be specific, factual, and engaging. If they ask about a player, mention relevant stats or achievements. 
+    If they ask about history, provide interesting facts. If they ask about current events, give recent updates.
+    """
+    
     # We ask the model to self-limit length; we also clamp later in code.
     messages = [
         {"role": "system", "content": SYSTEM_STYLE},
-        {"role": "user", "content": f"Keep to <= {max_chars} characters.\n{user_prompt}"}
+        {"role": "user", "content": f"Keep to <= {max_chars} characters.\n{enhanced_prompt}"}
     ]
 
     resp = client.chat.completions.create(
         model="gpt-3.5-turbo",  # cheaper alternative
         messages=messages,
-        temperature=0.9,
-        max_tokens=110,  # plenty for ~240 characters
+        temperature=0.7,  # Slightly lower for more consistent responses
+        max_tokens=150,  # plenty for ~200 characters
     )
     return resp.choices[0].message.content.strip()
