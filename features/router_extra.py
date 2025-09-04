@@ -63,36 +63,60 @@ def route_related(text: str):
 
     if P_INJ.search(t):
         try:
-            return fmt_injuries(sofa_provider.team_injuries())
+            injuries_data = sofa_provider.team_injuries()
+            if injuries_data and "players" in injuries_data:
+                return fmt_injuries(injuries_data)
+            else:
+                return "🏥 *Injuries*\n\nNo injury information available. Please try:\n• `/injuries` - for current injury list\n• `/injuries` - for unavailable players"
         except Exception:
-            return "No injury information available."
+            return "🏥 *Injuries*\n\nNo injury information available. Please try:\n• `/injuries` - for current injury list\n• `/injuries` - for unavailable players"
 
     if P_SQUAD.search(t):
         try:
-            return fmt_squad(sofa_provider.team_squad())
+            squad_data = sofa_provider.team_squad()
+            if squad_data and "players" in squad_data:
+                return fmt_squad(squad_data)
+            else:
+                return "👥 *Squad*\n\nSquad data temporarily unavailable. Please try:\n• `/squad` - for current squad\n• `/squad` - for full team roster"
         except Exception:
-            return "Squad data is unavailable."
+            return "👥 *Squad*\n\nSquad data temporarily unavailable. Please try:\n• `/squad` - for current squad\n• `/squad` - for full team roster"
 
     # positional squads
     if P_GK.search(t):
         try:
-            return fmt_squad(sofa_provider.team_squad(), pos="goalkeeper")
+            squad_data = sofa_provider.team_squad()
+            if squad_data and "players" in squad_data:
+                return fmt_squad(squad_data, pos="goalkeeper")
+            else:
+                return "🧤 *Goalkeepers*\n\nGoalkeeper data temporarily unavailable. Please try:\n• `/squad` - for full squad\n• `/squad` - for team roster"
         except Exception:
-            return "No goalkeeper info available."
+            return "🧤 *Goalkeepers*\n\nGoalkeeper data temporarily unavailable. Please try:\n• `/squad` - for full squad\n• `/squad` - for team roster"
     if P_DEF.search(t):
         try:
-            return fmt_squad(sofa_provider.team_squad(), pos="defender")
+            squad_data = sofa_provider.team_squad()
+            if squad_data and "players" in squad_data:
+                return fmt_squad(squad_data, pos="defender")
+            else:
+                return "🛡️ *Defenders*\n\nDefender data temporarily unavailable. Please try:\n• `/squad` - for full squad\n• `/squad` - for team roster"
         except Exception:
-            return "No defender info available."
+            return "🛡️ *Defenders*\n\nDefender data temporarily unavailable. Please try:\n• `/squad` - for full squad\n• `/squad` - for team roster"
     if P_MID.search(t):
         try:
-            return fmt_squad(sofa_provider.team_squad(), pos="midfielder")
+            squad_data = sofa_provider.team_squad()
+            if squad_data and "players" in squad_data:
+                return fmt_squad(squad_data, pos="midfielder")
+            else:
+                return "⚽ *Midfielders*\n\nMidfielder data temporarily unavailable. Please try:\n• `/squad` - for full squad\n• `/squad` - for team roster"
         except Exception:
-            return "No midfielder info available."
+            return "⚽ *Midfielders*\n\nMidfielder data temporarily unavailable. Please try:\n• `/squad` - for full squad\n• `/squad` - for team roster"
     if P_FWD.search(t):
         try:
-            return fmt_squad(sofa_provider.team_squad(), pos="forward")
+            squad_data = sofa_provider.team_squad()
+            if squad_data and "players" in squad_data:
+                return fmt_squad(squad_data, pos="forward")
+            else:
+                return "🎯 *Forwards*\n\nForward data temporarily unavailable. Please try:\n• `/squad` - for full squad\n• `/squad` - for team roster"
         except Exception:
-            return "No forward info available."
+            return "🎯 *Forwards*\n\nForward data temporarily unavailable. Please try:\n• `/squad` - for full squad\n• `/squad` - for team roster"
 
     return None  # let main router handle or refuse
