@@ -18,7 +18,7 @@ S.headers.update({
     "user-agent": "MadridistaBot/1.0"
 })
 
-def fetch_news_raw(category: Union[str, None] = None) -> Dict:
+def fetch_news_raw(category=None):
     if not KEY:
         return {"error": "Missing LIVESCORE_RAPIDAPI_KEY"}
     
@@ -28,7 +28,7 @@ def fetch_news_raw(category: Union[str, None] = None) -> Dict:
     r.raise_for_status()
     return r.json()
 
-def normalize_items(raw: Dict) -> List[Dict]:
+def normalize_items(raw):
     """
     Convert LiveScore payload to a simple list:
       {title, url, source, published, summary}
@@ -71,7 +71,7 @@ MADRID_KEYWORDS = [
     "cristiano", "ronaldo", "cr7"
 ]
 
-def madrid_filter(items: List[Dict]) -> List[Dict]:
+def madrid_filter(items):
     out = []
     for it in items:
         blob = f"{it.get('title','')} {it.get('summary','')}".lower()

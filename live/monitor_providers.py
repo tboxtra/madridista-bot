@@ -15,9 +15,9 @@ else:
 
 class LiveState:
     def __init__(self):
-        self.event_id: Optional[str] = None
-        self.homeScore: Optional[int] = None
-        self.awayScore: Optional[int] = None
+        self.event_id = None
+        self.homeScore = None
+        self.awayScore = None
         self.dedupe = DeDupe(maxlen=400)  # remember recent incidents
 
 STATE = LiveState()
@@ -26,12 +26,12 @@ PROV = Provider()
 def _team_tag(team):
     return "🤍" if team == "home" else ("💙" if team == "away" else "")
 
-def _format_incident_line(inc: Dict[str, Any]) -> str:
+def _format_incident_line(inc):
     minute = f"{inc['minute']}' " if inc.get("minute") is not None else ""
     tag = _team_tag(inc.get("team"))
     return f"{minute}{tag} {inc['text']}".strip()
 
-async def monitor_tick(context) -> None:
+async def monitor_tick(context):
     bot = context.application.bot
     subs: set = context.application.bot_data.get("subs", set())
     if not subs:

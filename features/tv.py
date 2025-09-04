@@ -4,7 +4,7 @@ from providers.sofa_tv import get_available_countries, get_channels_for_country
 
 USER_CC = os.getenv("USER_COUNTRY", "NG").upper()
 
-def _fmt_channel(ch: dict) -> str:
+def _fmt_channel(ch):
     # Common keys (varies by feed): name, provider, language, webUrl
     name = ch.get("name") or ch.get("channelName") or "Channel"
     prov = ch.get("provider") or ch.get("broadcaster") or ""
@@ -18,7 +18,7 @@ def _fmt_channel(ch: dict) -> str:
         return f"• {line}\n{url}"
     return f"• {line}"
 
-def tv_handler(match_id: Optional[str]) -> str:
+def tv_handler(match_id):
     if not match_id:
         return "Send a match id: `/tv 13157877`"  # keep simple; you can auto-detect later
 

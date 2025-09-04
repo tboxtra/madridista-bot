@@ -1,6 +1,6 @@
 from providers.livescore_news import fetch_news_raw, normalize_items, madrid_filter
 
-def _fmt_item(it) -> str:
+def _fmt_item(it):
     t = it.get("title","").strip() or "Untitled"
     u = it.get("url","").strip()
     s = it.get("source","").strip()
@@ -12,7 +12,7 @@ def _fmt_item(it) -> str:
         return f"{line1}\n{line2}\n{u}"
     return f"{line1}\n{line2}".strip()
 
-def news_handler() -> str:
+def news_handler():
     try:
         raw = fetch_news_raw()
         items = normalize_items(raw)

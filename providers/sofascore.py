@@ -12,7 +12,7 @@ def _get(path: str) -> dict:
     r.raise_for_status()
     return r.json()
 
-def _map_event(e: dict) -> Dict[str, Any]:
+def _map_event(e):
     # SofaScore event object → normalized
     home = e.get("homeTeam", {}).get("name", "Home")
     away = e.get("awayTeam", {}).get("name", "Away")
@@ -29,7 +29,7 @@ def _map_event(e: dict) -> Dict[str, Any]:
         "competition": comp or "",
     }
 
-def _map_incident(inc: dict, home_id: Union[int, None], away_id: Union[int, None]) -> Dict[str, Any]:
+def _map_incident(inc, home_id, away_id):
     # Common types:
     # type: 'goal', 'yellow-card', 'red-card', 'substitution', 'var', 'period' etc.
     itype = inc.get("type")
@@ -86,7 +86,7 @@ class SofaScoreProvider:
     def __init__(self, team_id: Union[int, None] = None):
         self.team_id = int(team_id or TEAM_ID)
 
-    def get_team_live_event(self) -> Optional[Dict[str, Any]]:
+    def get_team_live_event(self):
         # Option A: global live list, filter by team id
         # /sport/football/events/live
         try:
@@ -101,7 +101,7 @@ class SofaScoreProvider:
             print(f"SofaScore live event error: {e}")
             return None
 
-    def get_event_incidents(self, event_id: Union[str, int]) -> List[Dict[str, Any]]:
+    def get_event_incidents(self, event_id):
         # /event/{id}/incidents
         try:
             data = _get(f"/event/{event_id}/incidents")
@@ -121,6 +121,6 @@ class SofaScoreProvider:
             print(f"SofaScore incidents error: {e}")
             return []
 
-    def short_event_line(self, event: Dict[str, Any]) -> str:
+    def short_event_line(self, event):
         minute = f"{event['minute']}'" if event.get("minute") else ""
         return f"**LIVE** {minute}\n{event['homeName']} {event['homeScore']} – {event['awayScore']} {event['awayName']}\n{event['competition']}"

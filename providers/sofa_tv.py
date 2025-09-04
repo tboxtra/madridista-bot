@@ -17,7 +17,7 @@ S.headers.update({
 
 BASE = f"https://{HOST}"
 
-def get_available_countries(match_id: Union[int, str]) -> List[Dict]:
+def get_available_countries(match_id):
     """
     Returns a list of countries that have TV channels for this match.
     Each item commonly has: {countryCode, countryName}
@@ -35,7 +35,7 @@ def get_available_countries(match_id: Union[int, str]) -> List[Dict]:
         countries = countries.get("countries", [])
     return countries or []
 
-def get_channels_for_country(match_id: Union[int, str], country_code: str) -> List[Dict]:
+def get_channels_for_country(match_id, country_code):
     """
     Fetch channels for a specific country code (e.g., 'NG', 'ES').
     Endpoint: /tvchannels/get-list?matchId=...&countryCode=...
