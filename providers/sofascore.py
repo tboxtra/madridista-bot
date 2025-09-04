@@ -135,3 +135,18 @@ class SofaScoreProvider:
         from utils.formatting import md_escape
         mn = f"{int(ev['minute'])}′ " if ev.get("minute") is not None else ""
         return f"*LIVE* {mn}\n{md_escape(ev['homeName'])} {ev['homeScore']} – {ev['awayScore']} {md_escape(ev['awayName'])}\n{md_escape(ev.get('competition',''))}"
+
+    # New helper methods for extended functionality
+    def team_squad(self, team_id: Optional[int] = None):
+        tid = int(team_id or self.team_id)
+        return _get_json(f"/team/{tid}/players")  # includes positions, injuries sometimes
+
+    def event_lineups(self, event_id):
+        return _get_json(f"/event/{event_id}/lineups")  # starting XI, bench
+
+    def team_injuries(self, team_id: Optional[int] = None):
+        tid = int(team_id or self.team_id)
+        return _get_json(f"/team/{tid}/injuries")
+
+    def h2h(self, team_a_id: int, team_b_id: int):
+        return _get_json(f"/team/{team_a_id}/unique-tournament/season/0/opponent/{team_b_id}/matches")  # SofaScore H2H variant
