@@ -3,7 +3,7 @@ import logging
 import random
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from ai_engine.gpt_engine import generate_short_post
+from ai_engine.gpt_engine import generate_short_post, analyze_madrid_context
 
 # Import our new football services
 from services.football_api import FootballAPIService
@@ -22,7 +22,10 @@ from features.tv import tv_handler
 from features.chat_replies import chat_message_handler
 
 # Import memory system
-from utils.memory import push as mem_push
+from utils.memory import push as mem_push, get_context
+
+# Import time utilities
+from utils.time_utils import get_timezone_info, get_current_time, get_utc_now
 
 # Enable logging
 logging.basicConfig(
@@ -168,7 +171,6 @@ class MadridistaTelegramBot:
             context_text = "\n".join([f"{a}: {t}" for (a, t) in turns[-8:]])
             
             # Use advanced analysis
-            from ai_engine.gpt_engine import analyze_madrid_context
             analysis = analyze_madrid_context(context_text, question)
             
             await update.message.reply_text(f"🔍 **AI Analysis** 🔍\n\n**Question:** {question}\n\n{analysis}")
@@ -180,8 +182,6 @@ class MadridistaTelegramBot:
     async def time_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /time command - show current time and timezone information"""
         try:
-            from utils.time_utils import get_timezone_info, get_current_time, get_utc_now
-            
             # Get time information
             timezone_info = get_timezone_info()
             current_time = get_current_time()
@@ -237,7 +237,6 @@ class MadridistaTelegramBot:
             context_text = "\n".join([f"{a}: {t}" for (a, t) in turns[-8:]])
             
             # Use advanced analysis
-            from ai_engine.gpt_engine import analyze_madrid_context
             analysis = analyze_madrid_context(context_text, question)
             
             await update.message.reply_text(f"🧠 **AI Analysis Result** 🧠\n\n**Question:** {question}\n\n{analysis}")

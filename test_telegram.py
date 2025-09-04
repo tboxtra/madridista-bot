@@ -27,10 +27,10 @@ def test_imports():
         return False
     
     try:
-        from prompts.fan_prompts import PROMPTS
-        print("✅ Prompts imported successfully")
+        from ai_engine.gpt_engine import analyze_madrid_context
+        print("✅ AI analysis imported successfully")
     except ImportError as e:
-        print(f"❌ Failed to import prompts: {e}")
+        print(f"❌ Failed to import AI analysis: {e}")
         return False
     
     return True
