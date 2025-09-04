@@ -148,35 +148,44 @@ class FootballAPIService:
             async with aiohttp.ClientSession() as session:
                 headers = {'X-Auth-Token': self.football_data_key}
                 
-                # Get recent matches
+                # Get matches with better date filtering
                 matches_url = f"{self.football_data_base}/teams/{self.real_madrid_id}/matches"
+                
+                # Get more matches initially to filter properly
                 params = {
-                    'limit': limit,
-                    'dateFrom': (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
-                    'dateTo': (datetime.now() + timedelta(days=90)).strftime('%Y-%m-%d')
+                    'limit': 20,  # Get more to filter properly
+                    'dateFrom': (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'),  # Recent past
+                    'dateTo': (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')   # Near future
                 }
                 
                 async with session.get(matches_url, headers=headers, params=params) as response:
                     if response.status == 200:
                         matches_data = await response.json()
-                        matches = matches_data.get('matches', [])
-                        logger.info(f"Successfully fetched live match data: {len(matches)} matches")
+                        all_matches = matches_data.get('matches', [])
+                        logger.info(f"Successfully fetched live match data: {len(all_matches)} matches")
                         
+                        # Process and sort matches by date
                         processed_matches = []
-                        for match in matches:
+                        for match in all_matches:
+                            match_date = datetime.fromisoformat(match.get('utcDate', '').replace('Z', '+00:00'))
                             processed_matches.append({
                                 'home_team': match.get('homeTeam', {}).get('name', ''),
                                 'away_team': match.get('awayTeam', {}).get('name', ''),
                                 'home_score': match.get('score', {}).get('fullTime', {}).get('home'),
                                 'away_score': match.get('score', {}).get('fullTime', {}).get('away'),
                                 'date': match.get('utcDate', ''),
+                                'match_date': match_date,  # Add parsed date for sorting
                                 'competition': match.get('competition', {}).get('name', ''),
                                 'status': match.get('status', ''),
                                 'venue': match.get('venue', ''),
                                 'source': 'Live API'
                             })
                         
-                        return processed_matches
+                        # Sort by date (most recent first, then upcoming)
+                        processed_matches.sort(key=lambda x: x['match_date'], reverse=True)
+                        
+                        # Return only the requested limit
+                        return processed_matches[:limit]
                     else:
                         logger.warning(f"API returned status {response.status}")
                         return self._get_fallback_matches()

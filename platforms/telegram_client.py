@@ -311,7 +311,7 @@ class MadridistaTelegramBot:
         user_message = update.message.text.lower()
         
         # Check if message is about Real Madrid
-        madrid_keywords = ['madrid', 'real madrid', 'bernabeu', 'hala madrid', 'cr7', 'ronaldo', 'vinicius', 'vini', 'benzema', 'modric', 'kroos', 'carlo', 'ancelotti', 'champions', 'liga', 'barcelona', 'atletico', 'sevilla', 'valencia']
+        madrid_keywords = ['madrid', 'real madrid', 'bernabeu', 'hala madrid', 'cr7', 'ronaldo', 'vinicius', 'vini', 'benzema', 'modric', 'kroos', 'carlo', 'ancelotti', 'champions', 'liga', 'barcelona', 'atletico', 'sevilla', 'valencia', 'squad', 'team', 'players', 'matches', 'games', 'season', 'transfer', 'news']
         
         if any(keyword in user_message for keyword in madrid_keywords):
             try:
@@ -341,6 +341,19 @@ class MadridistaTelegramBot:
                     await update.message.reply_text(response)
                     return
                 
+                # Check for specific data requests
+                elif any(word in user_message for word in ['squad', 'team', 'players', 'roster']):
+                    await self.squad_command(update, context)
+                    return
+                
+                elif any(word in user_message for word in ['matches', 'games', 'fixtures', 'schedule']):
+                    await self.matches_command(update, context)
+                    return
+                
+                elif any(word in user_message for word in ['standings', 'table', 'position', 'points']):
+                    await self.standings_command(update, context)
+                    return
+                
                 # Check for banter opportunities
                 elif any(rival in user_message for rival in ['barcelona', 'barca', 'barça']):
                     banter = get_banter_responses()["barcelona"]
@@ -355,13 +368,43 @@ class MadridistaTelegramBot:
                     return
                 
                 # Generate a relevant response using AI
-                context_prompt = f"User asked: {update.message.text}\n\nGenerate a helpful, informative response about Real Madrid that directly addresses what they're asking. Use accurate facts and be engaging."
-                
-                response = generate_short_post(context_prompt, max_chars=200)
-                await update.message.reply_text(f"⚽ {response}")
+                try:
+                    # Create a more specific prompt based on the user's question
+                    if '?' in update.message.text:
+                        # User asked a specific question
+                        context_prompt = f"""You are a Real Madrid expert. The user asked: "{update.message.text}"
+
+Please provide a helpful, accurate, and engaging response about Real Madrid that directly answers their question. Use current facts and be informative.
+
+Response:"""
+                    else:
+                        # User made a statement or comment
+                        context_prompt = f"""You are a Real Madrid expert. The user said: "{update.message.text}"
+
+Please provide an engaging response about Real Madrid that relates to what they said. Be informative and passionate about the club.
+
+Response:"""
+                    
+                    response = generate_short_post(context_prompt, max_chars=250)
+                    
+                    # Check if AI response is valid
+                    if response and len(response.strip()) > 10:
+                        await update.message.reply_text(f"⚽ {response}")
+                    else:
+                        # Fallback to banter if AI response is too short
+                        banter = get_banter_responses()["general"]
+                        response = random.choice(banter)
+                        await update.message.reply_text(response)
+                        
+                except Exception as ai_error:
+                    logger.error(f"AI response generation failed: {ai_error}")
+                    # Fallback to banter
+                    banter = get_banter_responses()["general"]
+                    response = random.choice(banter)
+                    await update.message.reply_text(response)
                 
             except Exception as e:
-                logger.error(f"Error generating response: {e}")
+                logger.error(f"Error in handle_message: {e}")
                 # Fallback to banter
                 banter = get_banter_responses()["general"]
                 response = random.choice(banter)
