@@ -2,25 +2,7 @@
 from utils.formatting import md_escape
 from utils.timeutil import fmt_abs
 
-def fmt_table(fd_table_json):
-    """Return top 5 lines of LaLiga table."""
-    tables = fd_table_json.get("standings", [])
-    if not tables: return "Table unavailable."
-    table = tables[0].get("table", [])[:5]
-    lines = ["*LaLiga Table (Top 5)*"]
-    for row in table:
-        lines.append(f"{row['position']}. {md_escape(row['team']['name'])}  {row['points']} pts")
-    return "\n".join(lines)
-
-def fmt_form(matches, k=5):
-    if not matches: return "No recent matches."
-    lines = ["*Recent Form (last 5)*"]
-    for m in matches[:k]:
-        home = md_escape(m['homeTeam']['name']); away = md_escape(m['awayTeam']['name'])
-        ft = m.get("score",{}).get("fullTime",{}) or {}
-        hs, as_ = ft.get("home",0), ft.get("away",0)
-        lines.append(f"{fmt_abs(m['utcDate'])} • {home} {hs}-{as_} {away}")
-    return "\n".join(lines)
+# Legacy functions removed - replaced by generic formatters below
 
 def fmt_scorers(fd_scorers_json):
     items = fd_scorers_json.get("scorers", [])[:5]
