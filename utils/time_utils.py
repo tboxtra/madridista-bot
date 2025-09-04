@@ -36,12 +36,17 @@ def format_time_until(target_time: Union[datetime, str], source_time: Optional[d
     """
     if isinstance(target_time, str):
         try:
-            target_time = datetime.fromisoformat(target_time.replace('Z', '+00:00'))
+            # Handle different ISO formats properly
+            if target_time.endswith('Z'):
+                target_time = target_time[:-1] + '+00:00'
+            elif '+' not in target_time and 'T' in target_time:
+                target_time = target_time + '+00:00'
+            target_time = datetime.fromisoformat(target_time)
         except ValueError:
             return "Unknown time"
     
     if source_time is None:
-        source_time = get_current_time()
+        source_time = get_utc_now()
     
     # Ensure both times are timezone-aware
     if target_time.tzinfo is None:
@@ -49,7 +54,11 @@ def format_time_until(target_time: Union[datetime, str], source_time: Optional[d
     if source_time.tzinfo is None:
         source_time = source_time.replace(tzinfo=timezone.utc)
     
-    diff = target_time - source_time
+    # Convert both to UTC for accurate comparison
+    target_utc = target_time.astimezone(timezone.utc)
+    source_utc = source_time.astimezone(timezone.utc)
+    
+    diff = target_utc - source_utc
     total_seconds = diff.total_seconds()
     
     if total_seconds <= 0:
@@ -90,27 +99,27 @@ def format_match_time(match_time: Union[datetime, str], timezone_name: Optional[
     """
     if isinstance(match_time, str):
         try:
-            match_time = datetime.fromisoformat(match_time.replace('Z', '+00:00'))
+            # Handle different ISO formats properly
+            if match_time.endswith('Z'):
+                match_time = match_time[:-1] + '+00:00'
+            elif '+' not in match_time and 'T' in match_time:
+                match_time = match_time + '+00:00'
+            match_time = datetime.fromisoformat(match_time)
         except ValueError:
             return "Unknown time"
     
-    current_time = get_current_time(timezone_name)
+    current_time = get_utc_now()  # Always use UTC for comparison
     
     # Ensure match time is timezone-aware
     if match_time.tzinfo is None:
         match_time = match_time.replace(tzinfo=timezone.utc)
     
-    # Convert to target timezone if specified
-    if timezone_name:
-        try:
-            target_tz = pytz.timezone(timezone_name)
-            match_time = match_time.astimezone(target_tz)
-            current_time = current_time.astimezone(target_tz)
-        except pytz.exceptions.UnknownTimeZoneError:
-            pass
+    # Convert both to UTC for accurate comparison
+    match_utc = match_time.astimezone(timezone.utc)
+    current_utc = current_time.astimezone(timezone.utc)
     
     # Calculate time difference
-    diff = match_time - current_time
+    diff = match_utc - current_utc
     total_seconds = diff.total_seconds()
     
     # Format based on how far in the future
@@ -120,14 +129,14 @@ def format_match_time(match_time: Union[datetime, str], timezone_name: Optional[
         minutes = int(total_seconds // 60)
         return f"Starting in {minutes}m"
     elif total_seconds <= 86400:  # 24 hours
-        if match_time.date() == current_time.date():
-            return f"Today at {match_time.strftime('%H:%M')}"
+        if match_utc.date() == current_utc.date():
+            return f"Today at {match_utc.strftime('%H:%M')}"
         else:
-            return f"Tomorrow at {match_time.strftime('%H:%M')}"
+            return f"Tomorrow at {match_utc.strftime('%H:%M')}"
     elif total_seconds <= 604800:  # 7 days
-        return match_time.strftime("%a at %H:%M")
+        return match_utc.strftime("%a at %H:%M")
     else:
-        return match_time.strftime("%b %d at %H:%M")
+        return match_utc.strftime("%b %d at %H:%M")
 
 def get_time_status(match_time: Union[datetime, str]) -> str:
     """
@@ -141,7 +150,12 @@ def get_time_status(match_time: Union[datetime, str]) -> str:
     """
     if isinstance(match_time, str):
         try:
-            match_time = datetime.fromisoformat(match_time.replace('Z', '+00:00'))
+            # Handle different ISO formats properly
+            if match_time.endswith('Z'):
+                match_time = match_time[:-1] + '+00:00'
+            elif '+' not in match_time and 'T' in match_time:
+                match_time = match_time + '+00:00'
+            match_time = datetime.fromisoformat(match_time)
         except ValueError:
             return "📅 Unknown"
     
@@ -151,7 +165,11 @@ def get_time_status(match_time: Union[datetime, str]) -> str:
     if match_time.tzinfo is None:
         match_time = match_time.replace(tzinfo=timezone.utc)
     
-    diff = match_time - current_time
+    # Convert both to UTC for accurate comparison
+    match_utc = match_time.astimezone(timezone.utc)
+    current_utc = current_time.astimezone(timezone.utc)
+    
+    diff = match_utc - current_utc
     total_seconds = diff.total_seconds()
     
     if total_seconds <= -7200:  # 2 hours ago
@@ -193,7 +211,12 @@ def is_match_live(match_time: Union[datetime, str], duration_minutes: int = 120)
     """
     if isinstance(match_time, str):
         try:
-            match_time = datetime.fromisoformat(match_time.replace('Z', '+00:00'))
+            # Handle different ISO formats properly
+            if match_time.endswith('Z'):
+                match_time = match_time[:-1] + '+00:00'
+            elif '+' not in match_time and 'T' in match_time:
+                match_time = match_time + '+00:00'
+            match_time = datetime.fromisoformat(match_time)
         except ValueError:
             return False
     
@@ -203,9 +226,13 @@ def is_match_live(match_time: Union[datetime, str], duration_minutes: int = 120)
     if match_time.tzinfo is None:
         match_time = match_time.replace(tzinfo=timezone.utc)
     
-    match_end = match_time + timedelta(minutes=duration_minutes)
+    # Convert both to UTC for accurate comparison
+    match_utc = match_time.astimezone(timezone.utc)
+    current_utc = current_time.astimezone(timezone.utc)
     
-    return match_time <= current_time <= match_end
+    match_end = match_utc + timedelta(minutes=duration_minutes)
+    
+    return match_utc <= current_utc <= match_end
 
 def get_next_match_time(matches: list) -> Optional[datetime]:
     """
@@ -227,11 +254,21 @@ def get_next_match_time(matches: list) -> Optional[datetime]:
             continue
             
         try:
-            match_time = datetime.fromisoformat(match_time_str.replace('Z', '+00:00'))
+            # Handle different ISO formats properly
+            if match_time_str.endswith('Z'):
+                match_time_str = match_time_str[:-1] + '+00:00'
+            elif '+' not in match_time_str and 'T' in match_time_str:
+                match_time_str = match_time_str + '+00:00'
+            
+            match_time = datetime.fromisoformat(match_time_str)
             if match_time.tzinfo is None:
                 match_time = match_time.replace(tzinfo=timezone.utc)
             
-            diff = (match_time - current_time).total_seconds()
+            # Convert to UTC for accurate comparison
+            match_utc = match_time.astimezone(timezone.utc)
+            current_utc = current_time.astimezone(timezone.utc)
+            
+            diff = (match_utc - current_utc).total_seconds()
             if 0 < diff < min_diff:
                 min_diff = diff
                 next_match = match_time

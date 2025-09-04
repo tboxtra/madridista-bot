@@ -158,9 +158,9 @@ class FootballAPIService:
                 
                 # Get more matches initially to filter properly - focus on immediate future
                 params = {
-                    'limit': 30,  # Get more to filter properly
-                    'dateFrom': (get_current_time() - timedelta(days=1)).strftime('%Y-%m-%d'),  # Yesterday
-                    'dateTo': (get_current_time() + timedelta(days=14)).strftime('%Y-%m-%d')    # Next 2 weeks
+                    'limit': 50,  # Get more to filter properly
+                    'dateFrom': (get_utc_now() - timedelta(days=1)).strftime('%Y-%m-%d'),  # Yesterday
+                    'dateTo': (get_utc_now() + timedelta(days=30)).strftime('%Y-%m-%d')    # Next month
                 }
                 
                 async with session.get(matches_url, headers=headers, params=params) as response:
@@ -238,14 +238,16 @@ class FootballAPIService:
     
     def _get_fallback_matches(self) -> List[Dict[str, Any]]:
         """Get fallback match data"""
-        # Return some recent/upcoming matches
+        # Return some recent/upcoming matches with proper time formatting
+        current_time = get_utc_now()
+        
         fallback_matches = [
             {
                 'home_team': 'Real Madrid',
                 'away_team': 'Barcelona',
                 'home_score': 2,
                 'away_score': 1,
-                'date': '2024-04-21T20:00:00Z',
+                'date': (current_time - timedelta(days=7)).isoformat(),
                 'competition': 'La Liga',
                 'status': 'FINISHED',
                 'venue': 'Santiago Bernabéu',
@@ -256,7 +258,7 @@ class FootballAPIService:
                 'away_team': 'Manchester City',
                 'home_score': None,
                 'away_score': None,
-                'date': '2024-05-01T20:00:00Z',
+                'date': (current_time + timedelta(days=14)).isoformat(),
                 'competition': 'Champions League',
                 'status': 'SCHEDULED',
                 'venue': 'Santiago Bernabéu',
@@ -303,6 +305,8 @@ class FootballAPIService:
                                 })
                             
                             return processed_table
+                        else:
+                            return self._get_fallback_standings()
                     else:
                         logger.warning(f"API returned status {response.status}")
                         return self._get_fallback_standings()
@@ -312,16 +316,32 @@ class FootballAPIService:
     
     def _get_fallback_standings(self) -> List[Dict[str, Any]]:
         """Get fallback standings data"""
-        fallback_standings = [
-            {'position': 1, 'team': 'Real Madrid', 'played': 30, 'won': 24, 'drawn': 6, 'lost': 0, 'goals_for': 65, 'goals_against': 18, 'points': 78, 'source': 'Fallback Data'},
-            {'position': 2, 'team': 'Barcelona', 'played': 30, 'won': 21, 'drawn': 7, 'lost': 2, 'goals_for': 62, 'goals_against': 34, 'points': 70, 'source': 'Fallback Data'},
-            {'position': 3, 'team': 'Girona', 'played': 30, 'won': 20, 'drawn': 5, 'lost': 5, 'goals_for': 62, 'goals_against': 35, 'points': 65, 'source': 'Fallback Data'},
-            {'position': 4, 'team': 'Atlético Madrid', 'played': 30, 'won': 18, 'drawn': 4, 'lost': 8, 'goals_for': 55, 'goals_against': 35, 'points': 58, 'source': 'Fallback Data'},
-            {'position': 5, 'team': 'Athletic Bilbao', 'played': 30, 'won': 16, 'drawn': 8, 'lost': 6, 'goals_for': 50, 'goals_against': 28, 'points': 56, 'source': 'Fallback Data'}
+        return [
+            {
+                'position': 1,
+                'team': 'Real Madrid',
+                'played': 20,
+                'won': 16,
+                'drawn': 3,
+                'lost': 1,
+                'goals_for': 45,
+                'goals_against': 15,
+                'points': 51,
+                'source': 'Fallback Data'
+            },
+            {
+                'position': 2,
+                'team': 'Girona',
+                'played': 20,
+                'won': 15,
+                'drawn': 3,
+                'lost': 2,
+                'goals_for': 46,
+                'goals_against': 24,
+                'points': 48,
+                'source': 'Fallback Data'
+            }
         ]
-        
-        logger.info(f"Returning fallback standings data: {len(fallback_standings)} teams")
-        return fallback_standings
     
     def format_match_result(self, match: Dict[str, Any]) -> str:
         """Format match data into readable text"""
@@ -333,31 +353,22 @@ class FootballAPIService:
             return f"{source_indicator} 🔴 LIVE NOW! {match['home_team']} vs {match['away_team']} ({match['competition']})"
         elif match['status'] == 'SCHEDULED':
             try:
-                match_date = datetime.fromisoformat(match['date'].replace('Z', '+00:00'))
-                now = datetime.now()
-                time_diff = (match_date - now).total_seconds() / 60
+                # Use new time utilities for better formatting
+                time_status = get_time_status(match['date'])
+                time_until = format_time_until(match['date'])
                 
-                if time_diff <= 0:
-                    # Match should be starting now
+                if '⚡ Live' in time_status:
                     return f"{source_indicator} ⚡ STARTING NOW! {match['home_team']} vs {match['away_team']} ({match['competition']})"
-                elif time_diff <= 30:
-                    # Starting in next 30 minutes
-                    return f"{source_indicator} ⚡ {match['home_team']} vs {match['away_team']} - Starting in {int(time_diff)} minutes! ({match['competition']})"
-                elif time_diff <= 60:
-                    # Starting in next hour
-                    return f"{source_indicator} ⏰ {match['home_team']} vs {match['away_team']} - Starting in {int(time_diff)} minutes ({match['competition']})"
-                elif time_diff <= 1440:  # 24 hours
-                    # Starting today
-                    hours = int(time_diff // 60)
-                    minutes = int(time_diff % 60)
-                    if hours > 0:
-                        time_str = f"{hours}h {minutes}m"
-                    else:
-                        time_str = f"{minutes}m"
-                    return f"{source_indicator} ⏰ {match['home_team']} vs {match['away_team']} - Starting in {time_str} ({match['competition']})"
+                elif '🚨 Starting soon' in time_status:
+                    return f"{source_indicator} 🚨 {match['home_team']} vs {match['away_team']} - Starting very soon! ({match['competition']})"
+                elif '⏰ Starting soon' in time_status:
+                    return f"{source_indicator} ⏰ {match['home_team']} vs {match['away_team']} - {time_until} ({match['competition']})"
+                elif '📅 Today/Tomorrow' in time_status:
+                    return f"{source_indicator} ⏰ {match['home_team']} vs {match['away_team']} - {time_until} ({match['competition']})"
+                elif '📅 Upcoming' in time_status:
+                    return f"{source_indicator} 📅 {match['home_team']} vs {match['away_team']} - {time_until} ({match['competition']})"
                 else:
-                    # Starting in future days
-                    return f"{source_indicator} 📅 {match['home_team']} vs {match['away_team']} - {match_date.strftime('%d %b %Y')} ({match['competition']})"
+                    return f"{source_indicator} 📅 {match['home_team']} vs {match['away_team']} - TBD ({match['competition']})"
             except:
                 return f"{source_indicator} 📅 {match['home_team']} vs {match['away_team']} - TBD ({match['competition']})"
         else:
