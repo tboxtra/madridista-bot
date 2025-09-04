@@ -79,6 +79,9 @@ class MadridistaTelegramBot:
         # Time and timezone commands
         self.application.add_handler(CommandHandler("time", self.time_cmd))
         
+        # AI test command
+        self.application.add_handler(CommandHandler("ai", self.ai_test_cmd))
+        
         # Memory tap handler (runs first to store messages)
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._tap_memory), group=0)
         
@@ -209,6 +212,40 @@ class MadridistaTelegramBot:
             logger.error(f"Error in time command: {e}")
             await update.message.reply_text("Sorry, couldn't get time information right now!")
     
+    async def ai_test_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /ai command - test AI analysis capabilities"""
+        try:
+            if not context.args:
+                await update.message.reply_text(
+                    "🤖 **AI Test Command** 🤖\n\n"
+                    "Usage: `/ai <your question>`\n\n"
+                    "Examples:\n"
+                    "• `/ai Why is Vinicius so effective this season?`\n"
+                    "• `/ai Compare Real Madrid's tactics to Barcelona's`\n"
+                    "• `/ai How has Ancelotti improved the team?`\n"
+                    "• `/ai What makes Real Madrid special?`\n\n"
+                    "This tests the bot's AI analysis capabilities directly!"
+                )
+                return
+            
+            question = " ".join(context.args)
+            await update.message.reply_text("🧠 **Testing AI Analysis...**\n\nProcessing your question with GPT-5...")
+            
+            # Get conversation context
+            chat_id = update.effective_chat.id
+            turns = get_context(chat_id, k=10)
+            context_text = "\n".join([f"{a}: {t}" for (a, t) in turns[-8:]])
+            
+            # Use advanced analysis
+            from ai_engine.gpt_engine import analyze_madrid_context
+            analysis = analyze_madrid_context(context_text, question)
+            
+            await update.message.reply_text(f"🧠 **AI Analysis Result** 🧠\n\n**Question:** {question}\n\n{analysis}")
+            
+        except Exception as e:
+            logger.error(f"Error in AI test command: {e}")
+            await update.message.reply_text("Sorry, AI analysis failed! Check the logs for details.")
+    
     async def _tap_memory(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Memory tap handler - stores messages for conversational context"""
         msg = update.message
@@ -239,6 +276,7 @@ class MadridistaTelegramBot:
             "/banteron - Enable smart banter in this chat\n"
             "/banteroff - Disable smart banter in this chat\n"
             "/analyze - Advanced AI analysis with GPT-5\n"
+            "/ai - Test AI analysis capabilities\n"
             "/time - Show current time and timezone info\n"
             "/help - Show this help message\n\n"
             "Just chat with me about Real Madrid! Ask me anything about the club, players, history, or current events."
@@ -266,6 +304,7 @@ class MadridistaTelegramBot:
             "/banteron - Enable smart banter in this chat\n"
             "/banteroff - Disable smart banter in this chat\n"
             "/analyze - Advanced AI analysis with GPT-5\n"
+            "/ai - Test AI analysis capabilities\n"
             "/time - Show current time and timezone info\n"
             "/help - Show this help message\n\n"
             "You can also just chat with me about Real Madrid!"
@@ -645,11 +684,26 @@ class MadridistaTelegramBot:
         """Handle general messages about Real Madrid with intelligent responses and smart banter"""
         user_message = update.message.text.lower()
         
-        # First, try smart banter if enabled
-        try:
-            await chat_message_handler(update, context)
-        except Exception as e:
-            logger.debug(f"Smart banter failed: {e}")
+        # Check if this is a complex question that needs AI analysis
+        is_complex_question = any(word in user_message for word in ["why", "how", "explain", "analysis", "compare", "difference", "tactics", "strategy", "what", "when", "where", "who"])
+        
+        # For complex questions, use AI analysis directly
+        if is_complex_question:
+            try:
+                # Get conversation context
+                chat_id = update.effective_chat.id
+                turns = get_context(chat_id, k=10)
+                context_text = "\n".join([f"{a}: {t}" for (a, t) in turns[-8:]])
+                
+                # Use advanced analysis
+                from ai_engine.gpt_engine import analyze_madrid_context
+                analysis = analyze_madrid_context(context_text, update.message.text)
+                
+                await update.message.reply_text(f"🧠 **AI Analysis** 🧠\n\n{analysis}")
+                return
+            except Exception as e:
+                logger.error(f"AI analysis failed: {e}")
+                # Continue to fallback handling
         
         # Check if message is about Real Madrid
         madrid_keywords = ['madrid', 'real madrid', 'bernabeu', 'hala madrid', 'cr7', 'ronaldo', 'vinicius', 'vini', 'benzema', 'modric', 'kroos', 'carlo', 'ancelotti', 'champions', 'liga', 'barcelona', 'atletico', 'sevilla', 'valencia', 'squad', 'team', 'players', 'matches', 'games', 'season', 'transfer', 'news']
@@ -720,37 +774,56 @@ class MadridistaTelegramBot:
                 try:
                     # Create a more specific prompt based on the user's question
                     if '?' in update.message.text:
-                        # User asked a specific question
-                        context_prompt = f"""You are a Real Madrid expert. The user asked: "{update.message.text}"
+                        # User asked a specific question - use advanced analysis
+                        context_prompt = f"""You are a Real Madrid expert analyst. The user asked: "{update.message.text}"
 
-Please provide a helpful, accurate, and engaging response about Real Madrid that directly answers their question. Use current facts and be informative.
+Please provide a helpful, accurate, and engaging response about Real Madrid that directly answers their question. Use current facts, stats, and be informative. Focus on what they're asking.
 
 Response:"""
                     else:
                         # User made a statement or comment
                         context_prompt = f"""You are a Real Madrid expert. The user said: "{update.message.text}"
 
-Please provide an engaging response about Real Madrid that relates to what they said. Be informative and passionate about the club.
+Please provide an engaging response about Real Madrid that relates to what they said. Be informative and passionate about the club. Add relevant facts or insights.
 
 Response:"""
                     
-                    response = generate_short_post(context_prompt, max_chars=250)
+                    # Use the advanced analysis function for better responses
+                    from ai_engine.gpt_engine import analyze_madrid_context
+                    chat_id = update.effective_chat.id
+                    turns = get_context(chat_id, k=6)
+                    context_text = "\n".join([f"{a}: {t}" for (a, t) in turns[-4:]])
+                    
+                    response = analyze_madrid_context(context_text, update.message.text)
                     
                     # Check if AI response is valid
-                    if response and len(response.strip()) > 10:
-                        await update.message.reply_text(f"⚽ {response}")
+                    if response and len(response.strip()) > 20:
+                        await update.message.reply_text(f"🧠 **AI Analysis** 🧠\n\n{response}")
                     else:
-                        # Fallback to banter if AI response is too short
-                        banter = get_banter_responses()["general"]
-                        response = random.choice(banter)
-                        await update.message.reply_text(response)
+                        # Fallback to GPT-4o if advanced analysis fails
+                        response = generate_short_post(context_prompt, max_chars=300)
+                        if response and len(response.strip()) > 10:
+                            await update.message.reply_text(f"⚽ {response}")
+                        else:
+                            # Final fallback to banter
+                            banter = get_banter_responses()["general"]
+                            response = random.choice(banter)
+                            await update.message.reply_text(response)
                         
                 except Exception as ai_error:
                     logger.error(f"AI response generation failed: {ai_error}")
-                    # Fallback to banter
-                    banter = get_banter_responses()["general"]
-                    response = random.choice(banter)
-                    await update.message.reply_text(response)
+                    # Fallback to GPT-4o
+                    try:
+                        response = generate_short_post(context_prompt, max_chars=300)
+                        if response and len(response.strip()) > 10:
+                            await update.message.reply_text(f"⚽ {response}")
+                        else:
+                            raise Exception("GPT response too short")
+                    except:
+                        # Final fallback to banter
+                        banter = get_banter_responses()["general"]
+                        response = random.choice(banter)
+                        await update.message.reply_text(response)
                 
             except Exception as e:
                 logger.error(f"Error in handle_message: {e}")
@@ -759,8 +832,21 @@ Response:"""
                 response = random.choice(banter)
                 await update.message.reply_text(response)
         else:
-            # For non-Madrid topics, guide them to Real Madrid conversation
-            await update.message.reply_text("¡Hala Madrid! ⚽🤍 I'm your Real Madrid companion! Let's talk about the greatest club in the world. Ask me about players, history, matches, or anything Real Madrid related!")
+            # For non-Madrid topics, try to provide a helpful response or guide them
+            try:
+                # Even for non-Madrid topics, try to be helpful
+                if '?' in update.message.text:
+                    # User asked a question - try to answer or redirect
+                    response = f"🤔 That's an interesting question! While I'm specialized in Real Madrid, I can try to help. Could you rephrase it in terms of football, sports, or Real Madrid? Or use `/analyze` for detailed analysis!"
+                else:
+                    # User made a statement - engage them about Madrid
+                    response = f"💭 Interesting! While I'm your Real Madrid companion, I'd love to hear more about your thoughts on football. What do you think about Real Madrid's current season, players, or tactics?"
+                
+                await update.message.reply_text(response)
+            except Exception as e:
+                logger.error(f"Error in fallback response: {e}")
+                # Final fallback
+                await update.message.reply_text("¡Hala Madrid! ⚽🤍 I'm your Real Madrid companion! Let's talk about the greatest club in the world. Ask me about players, history, matches, or anything Real Madrid related!")
     
     def run(self):
         """Start the bot"""

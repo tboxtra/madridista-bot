@@ -109,15 +109,14 @@ async def chat_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     transcript = (convo + ("\n" if convo else "") + user_line)[-1200:]
 
     # Check if this is a complex question that needs detailed analysis
-    is_complex_question = any(word in txt.lower() for word in ["why", "how", "explain", "analysis", "compare", "difference", "tactics", "strategy"])
+    is_complex_question = any(word in txt.lower() for word in ["why", "how", "explain", "analysis", "compare", "difference", "tactics", "strategy", "what", "when", "where", "who"])
     
     if is_complex_question:
-        # Use advanced analysis for complex questions
-        reply = analyze_madrid_context(transcript, txt)
-        if len(reply) > 300:
-            reply = reply[:297] + "..."
+        # For complex questions, let the main handler deal with it
+        # This prevents conflicts and ensures proper AI analysis
+        return
     else:
-        # Use witty banter for simple statements
+        # Use witty banter for simple statements only
         prompt = (
             "You are a Real Madrid superfan in a Telegram group. "
             "Reply with short, witty, human banter. 1 sentence, <=180 chars, no hashtags/links, light emojis ok.\n\n"
