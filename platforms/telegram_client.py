@@ -147,8 +147,11 @@ class MadridistaTelegramBot:
             # Try to get live squad data
             squad = await self.football_api.get_real_madrid_squad()
             
-            if squad:
-                source_indicator = "🟢 Live Data" if squad[0].get('source') == 'Live API' else "🟡 Fallback Data"
+            if squad and len(squad) > 0:
+                # Check if this is actually live data (not fallback)
+                is_live_data = squad[0].get('source') == 'Live API'
+                source_indicator = "🟢 Live Data" if is_live_data else "🟡 Fallback Data"
+                
                 squad_text = f"🤍 **Real Madrid Current Squad** {source_indicator} 🤍\n\n"
                 
                 # Group by position
@@ -165,6 +168,13 @@ class MadridistaTelegramBot:
                         squad_text += f"• {player}\n"
                     squad_text += "\n"
                 
+                # Add data freshness info
+                if is_live_data:
+                    squad_text += f"📅 **Data Source**: Live from Football-Data.org\n"
+                    squad_text += f"🕐 **Last Updated**: {squad[0].get('last_updated', 'Recent')}\n"
+                else:
+                    squad_text += f"📅 **Data Source**: Fallback (2024 season)\n"
+                
                 await update.message.reply_text(squad_text)
             else:
                 # Fallback to static data
@@ -175,6 +185,7 @@ class MadridistaTelegramBot:
                         squad_text += f"• {player}\n"
                     squad_text += "\n"
                 
+                squad_text += f"📅 **Data Source**: Static fallback data\n"
                 await update.message.reply_text(squad_text)
                 
         except Exception as e:
@@ -188,10 +199,21 @@ class MadridistaTelegramBot:
             
             matches = await self.football_api.get_real_madrid_matches(limit=5)
             
-            if matches:
-                matches_text = "⚽ **Real Madrid Recent & Upcoming Matches** ⚽\n\n"
+            if matches and len(matches) > 0:
+                # Check if this is actually live data
+                is_live_data = matches[0].get('source') == 'Live API'
+                source_indicator = "🟢 Live Data" if is_live_data else "🟡 Fallback Data"
+                
+                matches_text = f"⚽ **Real Madrid Recent & Upcoming Matches** {source_indicator} ⚽\n\n"
                 for match in matches:
                     matches_text += self.football_api.format_match_result(match) + "\n\n"
+                
+                # Add data freshness info
+                if is_live_data:
+                    matches_text += f"📅 **Data Source**: Live from Football-Data.org\n"
+                    matches_text += f"🕐 **Last Updated**: Recent\n"
+                else:
+                    matches_text += f"📅 **Data Source**: Fallback data\n"
                 
                 await update.message.reply_text(matches_text)
             else:
@@ -208,8 +230,20 @@ class MadridistaTelegramBot:
             
             standings = await self.football_api.get_la_liga_standings()
             
-            if standings:
+            if standings and len(standings) > 0:
+                # Check if this is actually live data
+                is_live_data = standings[0].get('source') == 'Live API'
+                source_indicator = "🟢 Live Data" if is_live_data else "🟡 Fallback Data"
+                
                 standings_text = self.football_api.format_standings(standings, limit=10)
+                
+                # Add data freshness info
+                if is_live_data:
+                    standings_text += f"\n📅 **Data Source**: Live from Football-Data.org\n"
+                    standings_text += f"🕐 **Last Updated**: Recent\n"
+                else:
+                    standings_text += f"\n📅 **Data Source**: Fallback data\n"
+                
                 await update.message.reply_text(standings_text)
             else:
                 await update.message.reply_text("No standings data available. Check back later!")
