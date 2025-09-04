@@ -5,13 +5,19 @@ from ai_engine.gpt_engine import riff_short
 from utils.memory import get_context
 from media.media_lib import pick_media_for
 
-ENABLE = os.getenv("ENABLE_BANTER", "false").lower() == "true"
+ENABLE = os.getenv("ENABLE_BANTER", "true").lower() == "true"  # Default to true if not set
 GAP = int(os.getenv("BANTER_COOLDOWN_SEC", "45"))
 UGAP = int(os.getenv("BANTER_PER_USER_COOLDOWN_SEC", "120"))
 MAX_HOUR = int(os.getenv("BANTER_MAX_PER_HOUR", "15"))
 REPLY_PROB = float(os.getenv("BANTER_REPLY_PROB", "0.55"))
-KW = [k.strip().lower() for k in os.getenv("BANTER_KEYWORDS", "").split(",") if k.strip()]
-RIVALS = [k.strip().lower() for k in os.getenv("BANTER_RIVALS", "").split(",") if k.strip()]
+# Default keywords if environment variables aren't set
+DEFAULT_KEYWORDS = ["real madrid", "cristiano", "ronaldo", "cr7", "vinicius", "vini", "bernabeu", "hala madrid", "bellingham", "ancelotti", "mbappe"]
+DEFAULT_RIVALS = ["barcelona", "barca", "messi", "atleti", "psg", "man city"]
+
+KW = [k.strip().lower() for k in os.getenv("BANTER_KEYWORDS", "").split(",") if k.strip()] or DEFAULT_KEYWORDS
+RIVALS = [k.strip().lower() for k in os.getenv("BANTER_RIVALS", "").split(",") if k.strip()] or DEFAULT_RIVALS
+
+# Keywords loaded successfully
 
 MENTION_PATTERN = re.compile(r"@(realmadrid|cr7|vini|vinicius|bellingham|ancelotti|mbappe|yourbotname)", re.I)
 

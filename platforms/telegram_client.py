@@ -76,7 +76,10 @@ class MadridistaTelegramBot:
         # Memory tap handler (runs first to store messages)
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._tap_memory), group=0)
         
-        # Message handler for general conversation and smart banter
+        # Smart banter handler (runs after memory tap)
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_message_handler), group=5)
+        
+        # Message handler for general conversation (runs last)
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message), group=10)
     
     def setup_live_monitoring(self):
