@@ -16,6 +16,10 @@ from data.football_knowledge import (
 from utils.store import load_subs, save_subs
 from live.monitor_providers import monitor_tick, POLL_SECONDS
 
+# Import features
+from features.news import news_handler
+from features.tv import tv_handler
+
 # Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -55,6 +59,7 @@ class MadridistaTelegramBot:
         self.application.add_handler(CommandHandler("live", self.live_command))
         self.application.add_handler(CommandHandler("news", self.news_command))
         self.application.add_handler(CommandHandler("highlights", self.highlights_command))
+        self.application.add_handler(CommandHandler("tv", self.tv_command))
         
         # Live monitoring commands
         self.application.add_handler(CommandHandler("enablelive", self.enablelive_cmd))
@@ -108,6 +113,7 @@ class MadridistaTelegramBot:
             "/live - Live match updates\n"
             "/news - Latest transfer news\n"
             "/highlights - Match highlights\n"
+            "/tv - TV listings for matches\n"
             "/enablelive - Subscribe to live updates\n"
             "/disablelive - Unsubscribe from live updates\n"
             "/help - Show this help message\n\n"
@@ -130,6 +136,7 @@ class MadridistaTelegramBot:
             "/live - Live match updates\n"
             "/news - Latest transfer news\n"
             "/highlights - Match highlights\n"
+            "/tv - TV listings for matches\n"
             "/enablelive - Subscribe to live updates\n"
             "/disablelive - Unsubscribe from live updates\n"
             "/help - Show this help message\n\n"
@@ -418,42 +425,13 @@ class MadridistaTelegramBot:
             await update.message.reply_text("Sorry, couldn't fetch live updates right now!")
     
     async def news_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /news command - show latest transfer news and updates"""
+        """Handle /news command - show latest Madrid-focused news"""
         try:
             await update.message.reply_text("Fetching latest Real Madrid news... 📰")
             
-            news = await self.football_api.get_transfer_news(limit=5)
-            
-            if news and len(news) > 0:
-                news_text = f"📰 **Latest Real Madrid News** 📰\n\n"
-                
-                for i, article in enumerate(news, 1):
-                    source_indicator = "🟢" if article.get('source') == 'Live API' else "🟡"
-                    news_text += f"{source_indicator} **{i}. {article['title']}**\n"
-                    
-                    if article.get('summary'):
-                        summary = article['summary'][:100] + "..." if len(article['summary']) > 100 else article['summary']
-                        news_text += f"   {summary}\n"
-                    
-                    if article.get('published_at'):
-                        try:
-                            from datetime import datetime
-                            pub_date = datetime.fromisoformat(article['published_at'].replace('Z', '+00:00'))
-                            news_text += f"   📅 {pub_date.strftime('%d %b %Y')}\n"
-                        except:
-                            pass
-                    
-                    news_text += "\n"
-                
-                # Add data source info
-                if news[0].get('source') == 'Live API':
-                    news_text += f"📅 **Data Source**: Live from Football-Data.org\n"
-                else:
-                    news_text += f"📅 **Data Source**: Fallback data\n"
-                
-                await update.message.reply_text(news_text)
-            else:
-                await update.message.reply_text("No news available right now. Check back later!")
+            # Use the new news handler
+            news_text = news_handler()
+            await update.message.reply_text(news_text, parse_mode="Markdown", disable_web_page_preview=False)
                 
         except Exception as e:
             logger.error(f"Error in news command: {e}")
@@ -514,6 +492,26 @@ class MadridistaTelegramBot:
         except Exception as e:
             logger.error(f"Error in highlights command: {e}")
             await update.message.reply_text("Sorry, couldn't fetch highlights right now!")
+    
+    async def tv_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /tv command - show TV listings for a match"""
+        try:
+            # Check if match ID was provided
+            if context.args:
+                match_id = context.args[0]
+                result = tv_handler(match_id)
+                await update.message.reply_text(result, parse_mode="Markdown", disable_web_page_preview=False)
+            else:
+                await update.message.reply_text(
+                    "📺 **TV Listings** 📺\n\n"
+                    "Usage: `/tv <match_id>`\n\n"
+                    "Example: `/tv 13157877`\n\n"
+                    "This will show you where to watch the match in your country.\n\n"
+                    "💡 **Tip**: You can find match IDs from the `/matches` command or from SofaScore.com"
+                )
+        except Exception as e:
+            logger.error(f"Error in tv command: {e}")
+            await update.message.reply_text("Sorry, couldn't fetch TV listings right now!")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle general messages about Real Madrid with intelligent responses"""
