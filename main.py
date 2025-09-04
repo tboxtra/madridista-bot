@@ -292,8 +292,8 @@ class MadridistaBot:
         """Handle general messages - prioritize football router for all football questions"""
         user_message = update.message.text.lower()
         
-        # Check if this is a fixture/match question and redirect to real data
-        if any(word in user_message for word in ['next', 'upcoming', 'when', 'fixture', 'match', 'game', 'schedule']):
+        # Check if this is a FUTURE fixture/match question and redirect to real data
+        if any(word in user_message for word in ['next', 'upcoming', 'when', 'schedule']) and not any(word in user_message for word in ['last', 'previous', 'happened', 'result', 'score']):
             await self.matches_cmd(update, context)
             return
         

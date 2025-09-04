@@ -1,6 +1,6 @@
 # features/router_football.py
 import re
-from nlp.resolve import resolve_team, resolve_comp, resolve_player
+from nlp.resolve import resolve_team, resolve_comp, resolve_player, TEAM_ALIASES
 from providers.unified import fd_team_matches, fd_comp_table, fd_comp_scorers
 from features.answers import fmt_table_top, fmt_recent_form, fmt_next_from_list, fmt_last_result
 from utils.formatting import md_escape
@@ -8,8 +8,8 @@ from utils.formatting import md_escape
 # Pattern matching for different types of football questions
 P_STANDINGS = re.compile(r"\b(table|standings|position|rank)\b", re.I)
 P_FORM      = re.compile(r"\b(form|last\s*\d+|recent)\b", re.I)
-P_NEXT      = re.compile(r"\b(next|upcoming|fixture|game)\b", re.I)
-P_LAST      = re.compile(r"\b(last|previous|recent)\b.*\b(match|game|score|result)\b", re.I)
+P_NEXT      = re.compile(r"\b(next|upcoming|schedule)\b", re.I)  # Removed 'fixture' and 'game' to avoid conflicts
+P_LAST      = re.compile(r"\b(last|previous|recent|happened)\b.*\b(match|game|score|result|fixture)\b", re.I)
 P_SCORERS   = re.compile(r"\b(top\s*scorers?|goalscorers?)\b", re.I)
 
 def route_football(text: str):
@@ -65,14 +65,21 @@ def route_football(text: str):
     if P_LAST.search(text):
         team_id = resolve_team(text)
         if team_id:
+            # Extract team name early for better error messages
+            team_name = "this team"
+            for alias, tid in TEAM_ALIASES.items():
+                if tid == team_id and alias in text.lower():
+                    team_name = alias.title()
+                    break
+            
             try:
                 ms = fd_team_matches(team_id, status="FINISHED", limit=1)
                 if ms:
                     return fmt_last_result(ms[0])
                 else:
-                    return "⚽ *Last Match*\n\nNo recent match found. Please try:\n• `/last` - for Madrid's last result\n• `/last barcelona` - for Barca's last result\n• `/last bayern` - for Bayern's last result"
+                    return f"⚽ *Last Match - {team_name}*\n\nNo recent match data found for {team_name}. This could be because:\n• The team hasn't played recently\n• Data is temporarily unavailable\n• Season hasn't started yet\n\nTry:\n• `/last` - for Madrid's last result\n• `/last barcelona` - for Barca's last result\n• `/last bayern` - for Bayern's last result"
             except Exception:
-                return "⚽ *Last Match*\n\nLast match data temporarily unavailable. Please try:\n• `/last` - for Madrid's last result\n• `/last barcelona` - for Barca's last result\n• `/last bayern` - for Bayern's last result"
+                return f"⚽ *Last Match - {team_name}*\n\nLast match data temporarily unavailable for {team_name}. Please try:\n• `/last` - for Madrid's last result\n• `/last barcelona` - for Barca's last result\n• `/last bayern` - for Bayern's last result"
         else:
             return "⚽ *Last Match*\n\nPlease specify a team for match information. Try:\n• `/last` - for Madrid's last result\n• `/last barcelona` - for Barca's last result\n• `/last bayern` - for Bayern's last result"
 
