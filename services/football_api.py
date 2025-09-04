@@ -153,14 +153,15 @@ class FootballAPIService:
             async with aiohttp.ClientSession() as session:
                 headers = {'X-Auth-Token': self.football_data_key}
                 
-                # Get matches with focus on immediate upcoming
+                # Get matches with focus on immediate upcoming - extend range to get current season
                 matches_url = f"{self.football_data_base}/teams/{self.real_madrid_id}/matches"
                 
-                # Get more matches initially to filter properly - focus on immediate future
+                # Get more matches initially to filter properly - focus on current season
+                current_time = get_utc_now()
                 params = {
-                    'limit': 50,  # Get more to filter properly
-                    'dateFrom': (get_utc_now() - timedelta(days=1)).strftime('%Y-%m-%d'),  # Yesterday
-                    'dateTo': (get_utc_now() + timedelta(days=30)).strftime('%Y-%m-%d')    # Next month
+                    'limit': 100,  # Get more to filter properly
+                    'dateFrom': (current_time - timedelta(days=30)).strftime('%Y-%m-%d'),  # Last month
+                    'dateTo': (current_time + timedelta(days=90)).strftime('%Y-%m-%d')     # Next 3 months
                 }
                 
                 async with session.get(matches_url, headers=headers, params=params) as response:
@@ -237,7 +238,7 @@ class FootballAPIService:
             return self._get_fallback_matches()
     
     def _get_fallback_matches(self) -> List[Dict[str, Any]]:
-        """Get fallback match data"""
+        """Get fallback match data with current dates"""
         # Return some recent/upcoming matches with proper time formatting
         current_time = get_utc_now()
         
@@ -255,10 +256,21 @@ class FootballAPIService:
             },
             {
                 'home_team': 'Real Madrid',
-                'away_team': 'Manchester City',
+                'away_team': 'Atlético Madrid',
                 'home_score': None,
                 'away_score': None,
                 'date': (current_time + timedelta(days=14)).isoformat(),
+                'competition': 'La Liga',
+                'status': 'SCHEDULED',
+                'venue': 'Santiago Bernabéu',
+                'source': 'Fallback Data'
+            },
+            {
+                'home_team': 'Real Madrid',
+                'away_team': 'Manchester City',
+                'home_score': None,
+                'away_score': None,
+                'date': (current_time + timedelta(days=28)).isoformat(),
                 'competition': 'Champions League',
                 'status': 'SCHEDULED',
                 'venue': 'Santiago Bernabéu',
@@ -305,8 +317,6 @@ class FootballAPIService:
                                 })
                             
                             return processed_table
-                        else:
-                            return self._get_fallback_standings()
                     else:
                         logger.warning(f"API returned status {response.status}")
                         return self._get_fallback_standings()
@@ -316,32 +326,16 @@ class FootballAPIService:
     
     def _get_fallback_standings(self) -> List[Dict[str, Any]]:
         """Get fallback standings data"""
-        return [
-            {
-                'position': 1,
-                'team': 'Real Madrid',
-                'played': 20,
-                'won': 16,
-                'drawn': 3,
-                'lost': 1,
-                'goals_for': 45,
-                'goals_against': 15,
-                'points': 51,
-                'source': 'Fallback Data'
-            },
-            {
-                'position': 2,
-                'team': 'Girona',
-                'played': 20,
-                'won': 15,
-                'drawn': 3,
-                'lost': 2,
-                'goals_for': 46,
-                'goals_against': 24,
-                'points': 48,
-                'source': 'Fallback Data'
-            }
+        fallback_standings = [
+            {'position': 1, 'team': 'Real Madrid', 'played': 30, 'won': 24, 'drawn': 6, 'lost': 0, 'goals_for': 65, 'goals_against': 18, 'points': 78, 'source': 'Fallback Data'},
+            {'position': 2, 'team': 'Barcelona', 'played': 30, 'won': 21, 'drawn': 7, 'lost': 2, 'goals_for': 62, 'goals_against': 34, 'points': 70, 'source': 'Fallback Data'},
+            {'position': 3, 'team': 'Girona', 'played': 30, 'won': 20, 'drawn': 5, 'lost': 5, 'goals_for': 62, 'goals_against': 35, 'points': 65, 'source': 'Fallback Data'},
+            {'position': 4, 'team': 'Atlético Madrid', 'played': 30, 'won': 18, 'drawn': 4, 'lost': 8, 'goals_for': 55, 'goals_against': 35, 'points': 58, 'source': 'Fallback Data'},
+            {'position': 5, 'team': 'Athletic Bilbao', 'played': 30, 'won': 16, 'drawn': 8, 'lost': 6, 'goals_for': 50, 'goals_against': 28, 'points': 56, 'source': 'Fallback Data'}
         ]
+        
+        logger.info(f"Returning fallback standings data: {len(fallback_standings)} teams")
+        return fallback_standings
     
     def format_match_result(self, match: Dict[str, Any]) -> str:
         """Format match data into readable text"""

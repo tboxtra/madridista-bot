@@ -769,6 +769,12 @@ class MadridistaTelegramBot:
                     await update.message.reply_text(response)
                     return
                 
+                # Check if this is a fixture/match question and redirect to real data
+                if any(word in user_message for word in ['next', 'upcoming', 'when', 'fixture', 'match', 'game', 'schedule']):
+                    # For fixture questions, use real data instead of AI generation
+                    await self.matches_command(update, context)
+                    return
+                
                 # Generate a relevant response using AI
                 try:
                     # Create a more specific prompt based on the user's question
@@ -778,12 +784,16 @@ class MadridistaTelegramBot:
 
 Please provide a helpful, accurate, and engaging response about Real Madrid that directly answers their question. Use current facts, stats, and be informative. Focus on what they're asking.
 
+IMPORTANT: If they ask about specific fixtures, matches, or schedules, tell them to use the /matches command for accurate information. Do not make up fixture dates or match details.
+
 Response:"""
                     else:
                         # User made a statement or comment
                         context_prompt = f"""You are a Real Madrid expert. The user said: "{update.message.text}"
 
 Please provide an engaging response about Real Madrid that relates to what they said. Be informative and passionate about the club. Add relevant facts or insights.
+
+IMPORTANT: If they mention specific fixtures, matches, or schedules, tell them to use the /matches command for accurate information. Do not make up fixture dates or match details.
 
 Response:"""
                     
