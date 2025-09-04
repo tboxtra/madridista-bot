@@ -17,7 +17,7 @@ P_GK      = re.compile(r"\b(goalkeepers?|gks?)\b", re.I)
 P_DEF     = re.compile(r"\b(defenders?)\b", re.I)
 P_MID     = re.compile(r"\b(midfielders?)\b", re.I)
 P_FWD     = re.compile(r"\b(forwards?|strikers?)\b", re.I)
-P_INJ     = re.compile(r"\b(injur|unavailable|sidelined|suspension)\b", re.I)
+P_INJ     = re.compile(r"\b(injur|unavailable|sidelined|suspension|injured)\b", re.I)
 
 def route_related(text: str):
     t = text.lower()
