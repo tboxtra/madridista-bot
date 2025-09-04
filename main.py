@@ -38,6 +38,8 @@ class MadridistaBot:
         self.application.add_handler(CommandHandler("scorers", self.scorers_cmd))
         self.application.add_handler(CommandHandler("squad", self.squad_cmd))
         self.application.add_handler(CommandHandler("injuries", self.injuries_cmd))
+        self.application.add_handler(CommandHandler("next", self.next_cmd))
+        self.application.add_handler(CommandHandler("last", self.last_cmd))
         self.application.add_handler(CommandHandler("enablelive", self.enablelive_cmd))
         self.application.add_handler(CommandHandler("disablelive", self.disablelive_cmd))
         
@@ -90,15 +92,19 @@ class MadridistaBot:
             "/form - Show recent form (last 5 matches)\n"
             "/scorers - Show top LaLiga scorers\n"
             "/squad - Show current squad\n"
-            "/injuries - Show injuries/unavailable players\n\n"
+            "/injuries - Show injuries/unavailable players\n"
+            "/next [team] - Next fixture (default: Madrid)\n"
+            "/last [team] - Last result (default: Madrid)\n\n"
             "**Natural Questions:**\n"
             "You can also ask naturally:\n"
             "• \"Where is Madrid on the table?\"\n"
             "• \"Madrid last 5 results?\"\n"
+            "• \"Next game Barcelona?\"\n"
+            "• \"Top scorers UCL\"\n"
+            "• \"Premier League table\"\n"
             "• \"Who's injured?\"\n"
-            "• \"Show defenders\"\n"
-            "• \"Top scorers\"\n\n"
-            "Ask me about Real Madrid players, history, or current events!"
+            "• \"Show defenders\"\n\n"
+            "**Coverage:** Real Madrid + LaLiga priority, then all major leagues!"
         )
         await update.message.reply_text(help_text)
     
@@ -173,6 +179,54 @@ class MadridistaBot:
             logger.error(f"Error in injuries command: {e}")
             await update.message.reply_text("Injury data temporarily unavailable.")
     
+    async def next_cmd(self, update, context):
+        """Handle /next command - can specify team or default to Madrid"""
+        try:
+            from nlp.resolve import resolve_team
+            from providers.unified import fd_team_matches
+            from features.answers import fmt_next_from_list
+            
+            # Get team from command arguments or default to Madrid
+            args = context.args
+            team_text = " ".join(args) if args else "madrid"
+            team_id = resolve_team(team_text)
+            
+            if team_id:
+                matches = fd_team_matches(team_id, status=None, limit=20)
+                if matches:
+                    await update.message.reply_text(fmt_next_from_list(matches), parse_mode="Markdown")
+                else:
+                    await update.message.reply_text("No upcoming fixtures found.")
+            else:
+                await update.message.reply_text("Please specify a valid team name.")
+        except Exception as e:
+            logger.error(f"Error in next command: {e}")
+            await update.message.reply_text("Fixture data temporarily unavailable.")
+    
+    async def last_cmd(self, update, context):
+        """Handle /last command - can specify team or default to Madrid"""
+        try:
+            from nlp.resolve import resolve_team
+            from providers.unified import fd_team_matches
+            from features.answers import fmt_last_result
+            
+            # Get team from command arguments or default to Madrid
+            args = context.args
+            team_text = " ".join(args) if args else "madrid"
+            team_id = resolve_team(team_text)
+            
+            if team_id:
+                matches = fd_team_matches(team_id, status="FINISHED", limit=1)
+                if matches:
+                    await update.message.reply_text(fmt_last_result(matches[0]), parse_mode="Markdown")
+                else:
+                    await update.message.reply_text("No recent match found.")
+            else:
+                await update.message.reply_text("Please specify a valid team name.")
+        except Exception as e:
+            logger.error(f"Error in last command: {e}")
+            await update.message.reply_text("Match data temporarily unavailable.")
+    
     async def enablelive_cmd(self, update, context):
         """Handle /enablelive command"""
         subs = context.application.bot_data.setdefault("subs", set())
@@ -213,7 +267,17 @@ class MadridistaBot:
                 await self.matches_cmd(update, context)
                 return
             
-            # Try to route to specific data handlers first
+            # Try to route to football questions first (covers all football)
+            try:
+                from features.router_football import route_football
+                football_answer = route_football(update.message.text)
+                if football_answer:
+                    await update.message.reply_text(football_answer, parse_mode="Markdown")
+                    return
+            except Exception as e:
+                logger.warning(f"Football router error: {e}")
+            
+            # Then try Madrid-specific handlers (injuries, squad, etc.)
             try:
                 from features.router_extra import route_related
                 specific_answer = route_related(update.message.text)
@@ -221,7 +285,7 @@ class MadridistaBot:
                     await update.message.reply_text(specific_answer, parse_mode="Markdown")
                     return
             except Exception as e:
-                logger.warning(f"Router error: {e}")
+                logger.warning(f"Madrid router error: {e}")
                 # Continue to fallback response
             
             # Generate a relevant response
