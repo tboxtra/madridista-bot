@@ -139,7 +139,7 @@ class FootballAPIService:
         return squad
     
     async def get_real_madrid_matches(self, limit: int = 5) -> List[Dict[str, Any]]:
-        """Get recent and upcoming Real Madrid matches"""
+        """Get recent and upcoming Real Madrid matches with priority on immediate upcoming"""
         if not self.football_data_key:
             logger.info("No API key - returning fallback match data")
             return self._get_fallback_matches()
@@ -148,14 +148,14 @@ class FootballAPIService:
             async with aiohttp.ClientSession() as session:
                 headers = {'X-Auth-Token': self.football_data_key}
                 
-                # Get matches with better date filtering
+                # Get matches with focus on immediate upcoming
                 matches_url = f"{self.football_data_base}/teams/{self.real_madrid_id}/matches"
                 
                 # Get more matches initially to filter properly
                 params = {
-                    'limit': 20,  # Get more to filter properly
-                    'dateFrom': (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'),  # Recent past
-                    'dateTo': (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')   # Near future
+                    'limit': 30,  # Get more to filter properly
+                    'dateFrom': (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d'),  # Yesterday
+                    'dateTo': (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')    # Next week
                 }
                 
                 async with session.get(matches_url, headers=headers, params=params) as response:
@@ -164,25 +164,57 @@ class FootballAPIService:
                         all_matches = matches_data.get('matches', [])
                         logger.info(f"Successfully fetched live match data: {len(all_matches)} matches")
                         
-                        # Process and sort matches by date
+                        # Process and prioritize matches by immediacy
                         processed_matches = []
-                        for match in all_matches:
-                            match_date = datetime.fromisoformat(match.get('utcDate', '').replace('Z', '+00:00'))
-                            processed_matches.append({
-                                'home_team': match.get('homeTeam', {}).get('name', ''),
-                                'away_team': match.get('awayTeam', {}).get('name', ''),
-                                'home_score': match.get('score', {}).get('fullTime', {}).get('home'),
-                                'away_score': match.get('score', {}).get('fullTime', {}).get('away'),
-                                'date': match.get('utcDate', ''),
-                                'match_date': match_date,  # Add parsed date for sorting
-                                'competition': match.get('competition', {}).get('name', ''),
-                                'status': match.get('status', ''),
-                                'venue': match.get('venue', ''),
-                                'source': 'Live API'
-                            })
+                        now = datetime.now()
                         
-                        # Sort by date (most recent first, then upcoming)
-                        processed_matches.sort(key=lambda x: x['match_date'], reverse=True)
+                        for match in all_matches:
+                            try:
+                                match_date = datetime.fromisoformat(match.get('utcDate', '').replace('Z', '+00:00'))
+                                # Convert to local time (assuming UTC)
+                                match_date_local = match_date.replace(tzinfo=None)
+                                
+                                # Calculate time difference in minutes
+                                time_diff_minutes = (match_date_local - now).total_seconds() / 60
+                                
+                                processed_matches.append({
+                                    'home_team': match.get('homeTeam', {}).get('name', ''),
+                                    'away_team': match.get('awayTeam', {}).get('name', ''),
+                                    'home_score': match.get('score', {}).get('fullTime', {}).get('home'),
+                                    'away_score': match.get('score', {}).get('fullTime', {}).get('away'),
+                                    'date': match.get('utcDate', ''),
+                                    'match_date': match_date_local,
+                                    'time_diff_minutes': time_diff_minutes,  # For prioritization
+                                    'competition': match.get('competition', {}).get('name', ''),
+                                    'status': match.get('status', ''),
+                                    'venue': match.get('venue', ''),
+                                    'source': 'Live API'
+                                })
+                            except Exception as e:
+                                logger.warning(f"Error processing match date: {e}")
+                                continue
+                        
+                        # Sort by priority: LIVE > Starting soon > Today > Recent > Upcoming
+                        def match_priority(match):
+                            time_diff = match.get('time_diff_minutes', 999999)
+                            
+                            # LIVE matches (happening now)
+                            if match.get('status') == 'LIVE':
+                                return -1000
+                            # Starting in next 30 minutes
+                            elif 0 <= time_diff <= 30:
+                                return -500 + time_diff
+                            # Today's matches
+                            elif match.get('match_date').date() == now.date():
+                                return 0 + time_diff
+                            # Recent matches (yesterday)
+                            elif time_diff < 0:
+                                return 1000 + abs(time_diff)
+                            # Upcoming matches
+                            else:
+                                return 2000 + time_diff
+                        
+                        processed_matches.sort(key=match_priority)
                         
                         # Return only the requested limit
                         return processed_matches[:limit]
@@ -286,10 +318,35 @@ class FootballAPIService:
         
         if match['status'] == 'FINISHED':
             return f"{source_indicator} 🏆 {match['home_team']} {match['home_score']} - {match['away_score']} {match['away_team']} ({match['competition']})"
+        elif match['status'] == 'LIVE':
+            return f"{source_indicator} 🔴 LIVE NOW! {match['home_team']} vs {match['away_team']} ({match['competition']})"
         elif match['status'] == 'SCHEDULED':
             try:
                 match_date = datetime.fromisoformat(match['date'].replace('Z', '+00:00'))
-                return f"{source_indicator} 📅 {match['home_team']} vs {match['away_team']} - {match_date.strftime('%d %b %Y')} ({match['competition']})"
+                now = datetime.now()
+                time_diff = (match_date - now).total_seconds() / 60
+                
+                if time_diff <= 0:
+                    # Match should be starting now
+                    return f"{source_indicator} ⚡ STARTING NOW! {match['home_team']} vs {match['away_team']} ({match['competition']})"
+                elif time_diff <= 30:
+                    # Starting in next 30 minutes
+                    return f"{source_indicator} ⚡ {match['home_team']} vs {match['away_team']} - Starting in {int(time_diff)} minutes! ({match['competition']})"
+                elif time_diff <= 60:
+                    # Starting in next hour
+                    return f"{source_indicator} ⏰ {match['home_team']} vs {match['away_team']} - Starting in {int(time_diff)} minutes ({match['competition']})"
+                elif time_diff <= 1440:  # 24 hours
+                    # Starting today
+                    hours = int(time_diff // 60)
+                    minutes = int(time_diff % 60)
+                    if hours > 0:
+                        time_str = f"{hours}h {minutes}m"
+                    else:
+                        time_str = f"{minutes}m"
+                    return f"{source_indicator} ⏰ {match['home_team']} vs {match['away_team']} - Starting in {time_str} ({match['competition']})"
+                else:
+                    # Starting in future days
+                    return f"{source_indicator} 📅 {match['home_team']} vs {match['away_team']} - {match_date.strftime('%d %b %Y')} ({match['competition']})"
             except:
                 return f"{source_indicator} 📅 {match['home_team']} vs {match['away_team']} - TBD ({match['competition']})"
         else:
