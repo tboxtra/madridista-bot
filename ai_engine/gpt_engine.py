@@ -52,3 +52,17 @@ def generate_short_post(user_prompt: str, max_chars: int = 240) -> str:
         max_tokens=150,  # plenty for ~200 characters
     )
     return resp.choices[0].message.content.strip()
+
+def banter_reply(context_blob):
+    """Generate short, witty banter for group chat replies"""
+    prompt = (
+        "You are a Real Madrid superfan. Reply with short, witty banter. "
+        "Rules: 1) Be confident and playful, not toxic. "
+        "2) Keep it under 200 characters. 3) No hashtags or links. "
+        f"Context from the chat: {context_blob}"
+    )
+    
+    try:
+        return generate_short_post(prompt, max_chars=200)
+    except Exception:
+        return "Calma… champions DNA speaks for itself. 🤍"

@@ -19,6 +19,7 @@ from live.monitor_providers import monitor_tick, POLL_SECONDS
 # Import features
 from features.news import news_handler
 from features.tv import tv_handler
+from features.chat_replies import chat_message_handler
 
 # Enable logging
 logging.basicConfig(
@@ -65,7 +66,11 @@ class MadridistaTelegramBot:
         self.application.add_handler(CommandHandler("enablelive", self.enablelive_cmd))
         self.application.add_handler(CommandHandler("disablelive", self.disablelive_cmd))
         
-        # Message handler for general conversation
+        # Banter control commands
+        self.application.add_handler(CommandHandler("banteron", self.banteron_cmd))
+        self.application.add_handler(CommandHandler("banteroff", self.banteroff_cmd))
+        
+        # Message handler for general conversation and smart banter
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
     
     def setup_live_monitoring(self):
@@ -105,6 +110,22 @@ class MadridistaTelegramBot:
         
         await update.message.reply_text("🛑 **Live updates disabled for this chat.**\n\nYou won't receive live match updates anymore.\n\nUse `/enablelive` to subscribe again.")
     
+    async def banteron_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /banteron command - enable smart banter for this chat"""
+        # Store banter preference in bot data
+        chat_id = update.effective_chat.id
+        context.application.bot_data[f"banter_enabled::{chat_id}"] = True
+        
+        await update.message.reply_text("🎭 **Smart banter enabled for this chat!**\n\nI'll now join conversations with witty Real Madrid banter when triggered by keywords, mentions, or rival talk.\n\nUse `/banteroff` to disable if it gets too chatty!")
+    
+    async def banteroff_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /banteroff command - disable smart banter for this chat"""
+        # Store banter preference in bot data
+        chat_id = update.effective_chat.id
+        context.application.bot_data[f"banter_enabled::{chat_id}"] = False
+        
+        await update.message.reply_text("🤐 **Smart banter disabled for this chat.**\n\nI'll stay quiet and only respond to direct commands now.\n\nUse `/banteron` to re-enable the fun!")
+    
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
         welcome_message = (
@@ -124,6 +145,8 @@ class MadridistaTelegramBot:
             "/tv - TV listings for matches\n"
             "/enablelive - Subscribe to live updates\n"
             "/disablelive - Unsubscribe from live updates\n"
+            "/banteron - Enable smart banter in this chat\n"
+            "/banteroff - Disable smart banter in this chat\n"
             "/help - Show this help message\n\n"
             "Just chat with me about Real Madrid! Ask me anything about the club, players, history, or current events."
         )
@@ -147,6 +170,8 @@ class MadridistaTelegramBot:
             "/tv - TV listings for matches\n"
             "/enablelive - Subscribe to live updates\n"
             "/disablelive - Unsubscribe from live updates\n"
+            "/banteron - Enable smart banter in this chat\n"
+            "/banteroff - Disable smart banter in this chat\n"
             "/help - Show this help message\n\n"
             "You can also just chat with me about Real Madrid!"
         )
@@ -522,8 +547,14 @@ class MadridistaTelegramBot:
             await update.message.reply_text("Sorry, couldn't fetch TV listings right now!")
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle general messages about Real Madrid with intelligent responses"""
+        """Handle general messages about Real Madrid with intelligent responses and smart banter"""
         user_message = update.message.text.lower()
+        
+        # First, try smart banter if enabled
+        try:
+            await chat_message_handler(update, context)
+        except Exception as e:
+            logger.debug(f"Smart banter failed: {e}")
         
         # Check if message is about Real Madrid
         madrid_keywords = ['madrid', 'real madrid', 'bernabeu', 'hala madrid', 'cr7', 'ronaldo', 'vinicius', 'vini', 'benzema', 'modric', 'kroos', 'carlo', 'ancelotti', 'champions', 'liga', 'barcelona', 'atletico', 'sevilla', 'valencia', 'squad', 'team', 'players', 'matches', 'games', 'season', 'transfer', 'news']
