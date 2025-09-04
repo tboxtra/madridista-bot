@@ -73,9 +73,17 @@ class MadridistaTelegramBot:
         # Load existing subscribers into memory once
         self.application.bot_data["subs"] = set(load_subs())
         
-        # Schedule the live monitor (every POLL_SECONDS)
-        self.application.job_queue.run_repeating(monitor_tick, interval=POLL_SECONDS, first=5)
-        logger.info(f"Live monitoring scheduled every {POLL_SECONDS} seconds")
+        # Schedule the live monitor (every POLL_SECONDS) if job queue is available
+        if hasattr(self.application, 'job_queue') and self.application.job_queue:
+            try:
+                self.application.job_queue.run_repeating(monitor_tick, interval=POLL_SECONDS, first=5)
+                logger.info(f"Live monitoring scheduled every {POLL_SECONDS} seconds")
+            except Exception as e:
+                logger.warning(f"Could not schedule live monitoring: {e}")
+                logger.info("Bot will work without live monitoring")
+        else:
+            logger.warning("Job queue not available - live monitoring disabled")
+            logger.info("Bot will work without live monitoring")
     
     async def enablelive_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /enablelive command - subscribe to live updates"""
