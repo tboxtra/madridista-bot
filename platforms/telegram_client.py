@@ -14,7 +14,7 @@ from data.football_knowledge import (
 
 # Import live monitoring
 from utils.store import load_subs, save_subs
-from live.monitor import monitor_tick, POLL_SECONDS
+from live.monitor_providers import monitor_tick, POLL_SECONDS
 
 # Enable logging
 logging.basicConfig(
