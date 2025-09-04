@@ -289,15 +289,73 @@ class MadridistaBot:
         )
     
     async def handle_message(self, update, context):
-        """Handle general messages - prioritize football router for all football questions"""
+        """Handle general messages - prioritize AI analysis, then football router for all football questions"""
         user_message = update.message.text.lower()
         
-        # Check if this is a FUTURE fixture/match question and redirect to real data
-        if any(word in user_message for word in ['next', 'upcoming', 'when', 'schedule']) and not any(word in user_message for word in ['last', 'previous', 'happened', 'result', 'score']):
+        # Step 1: Try AI-powered question analysis FIRST (highest priority)
+        try:
+            from ai_engine.question_analyzer import analyze_question, get_ai_enhanced_response
+            
+            # Analyze the question with AI
+            analysis = analyze_question(update.message.text)
+            if analysis and analysis.get("confidence", 0) > 0.8:
+                # AI successfully analyzed the question
+                response_type = analysis.get("response_type", "general")
+                teams = analysis.get("teams", [])
+                competitions = analysis.get("competitions", [])
+                
+                # Generate AI-enhanced response
+                ai_response = get_ai_enhanced_response(update.message.text)
+                
+                # If this is a clear football question, try to get actual data
+                if response_type in ["table", "form", "next", "last", "h2h", "scorers", "squad", "injuries"]:
+                    # Try to get actual data from APIs
+                    try:
+                        from features.router_football import route_football
+                        from features.router_extra import route_related
+                        
+                        # Try football router first
+                        football_answer = route_football(update.message.text)
+                        if football_answer:
+                            # Combine AI analysis with actual data
+                            combined_response = f"{ai_response}\n\n📊 **Data Response:**\n{football_answer}"
+                            await update.message.reply_text(combined_response, parse_mode="Markdown")
+                            return
+                        
+                        # Try Madrid router for Madrid-specific questions
+                        if any(team.get("name", "").lower() in ["madrid", "real madrid"] for team in teams):
+                            madrid_answer = route_related(update.message.text)
+                            if madrid_answer:
+                                combined_response = f"{ai_response}\n\n📊 **Data Response:**\n{madrid_answer}"
+                                await update.message.reply_text(combined_response, parse_mode="Markdown")
+                                return
+                        
+                        # If no data found, show AI analysis with helpful guidance
+                        await update.message.reply_text(f"{ai_response}\n\n💡 **Tip**: Use specific commands for faster results:\n• `/table` - for league tables\n• `/form [team]` - for recent form\n• `/next [team]` - for upcoming fixtures", parse_mode="Markdown")
+                        return
+                        
+                    except Exception as e:
+                        logger.warning(f"API call error after AI analysis: {e}")
+                        # Show AI analysis even if APIs fail
+                        await update.message.reply_text(f"{ai_response}\n\n⚠️ Data temporarily unavailable, but I understood your question!", parse_mode="Markdown")
+                        return
+                
+                else:
+                    # General question, show AI analysis
+                    await update.message.reply_text(ai_response, parse_mode="Markdown")
+                    return
+                    
+        except Exception as e:
+            logger.warning(f"AI analysis error: {e}")
+            # Continue to fallback routing if AI fails
+        
+        # Step 2: Fallback to existing routing system
+        # Check if this is a fixture/match question and redirect to real data
+        if any(word in user_message for word in ['next', 'upcoming', 'when', 'schedule']) and not any(word in user_message for word in ['last', 'previous', 'recent', 'happened', 'result', 'score']):
             await self.matches_cmd(update, context)
             return
         
-        # Try to route to football questions FIRST (covers ALL football, not just Madrid)
+        # Try to route to football questions
         try:
             from features.router_football import route_football
             football_answer = route_football(update.message.text)
@@ -307,7 +365,7 @@ class MadridistaBot:
         except Exception as e:
             logger.warning(f"Football router error: {e}")
         
-        # Then try Madrid-specific handlers (injuries, squad, etc.)
+        # Then try Madrid-specific handlers
         try:
             from features.router_extra import route_related
             specific_answer = route_related(update.message.text)
