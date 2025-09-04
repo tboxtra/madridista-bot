@@ -11,9 +11,73 @@ P_FORM      = re.compile(r"\b(form|last\s*\d+|recent)\b", re.I)
 P_NEXT      = re.compile(r"\b(next|upcoming|schedule)\b", re.I)  # Removed 'fixture' and 'game' to avoid conflicts
 P_LAST      = re.compile(r"\b(last|previous|recent|happened)\b.*\b(match|game|score|result|fixture)\b", re.I)
 P_SCORERS   = re.compile(r"\b(top\s*scorers?|goalscorers?)\b", re.I)
+P_H2H       = re.compile(r"\b(vs|versus|against|h2h|head\s*to\s*head)\b", re.I)  # Head-to-head matches
 
 def route_football(text: str):
     """Route football-related questions to appropriate API calls"""
+    
+    # 0) Head-to-head matches (highest priority)
+    if P_H2H.search(text) or " vs " in text.lower():
+        # Try to extract team names from the text
+        from nlp.resolve import TEAM_ALIASES
+        
+        # Look for team names in the text
+        found_teams = []
+        for alias, team_id in TEAM_ALIASES.items():
+            if alias in text.lower():
+                found_teams.append((alias, team_id))
+        
+        if len(found_teams) >= 2:
+            # We found at least 2 teams, this is a head-to-head question
+            team1_name, team1_id = found_teams[0]
+            team2_name, team2_id = found_teams[1]
+            
+            try:
+                # Get recent matches for both teams to find their last meeting
+                from providers.unified import fd_team_matches
+                
+                # Get recent matches for both teams
+                team1_matches = fd_team_matches(team1_id, status="FINISHED", limit=50)
+                team2_matches = fd_team_matches(team2_id, status="FINISHED", limit=50)
+                
+                # Find matches where they played each other
+                h2h_matches = []
+                for match in team1_matches:
+                    home_id = match.get("homeTeam", {}).get("id")
+                    away_id = match.get("awayTeam", {}).get("id")
+                    
+                    if (home_id == team1_id and away_id == team2_id) or (home_id == team2_id and away_id == team1_id):
+                        h2h_matches.append(match)
+                
+                if h2h_matches:
+                    # Sort by date (most recent first)
+                    h2h_matches.sort(key=lambda x: x["utcDate"], reverse=True)
+                    latest_h2h = h2h_matches[0]
+                    
+                    # Format the head-to-head result
+                    from utils.timeutil import fmt_abs
+                    from utils.formatting import md_escape
+                    
+                    home_team = md_escape(latest_h2h["homeTeam"]["name"])
+                    away_team = md_escape(latest_h2h["awayTeam"]["name"])
+                    home_score = latest_h2h.get("score", {}).get("fullTime", {}).get("home", 0)
+                    away_score = latest_h2h.get("score", {}).get("fullTime", {}).get("away", 0)
+                    match_date = fmt_abs(latest_h2h["utcDate"])
+                    
+                    return f"⚽ *Last {team1_name.title()} vs {team2_name.title()}*\n\n{match_date}\n{home_team} {home_score}-{away_score} {away_team}"
+                else:
+                    return f"🤝 *{team1_name.title()} vs {team2_name.title()}*\n\nNo recent matches found between these teams. This could be because:\n• They haven't played recently\n• They're in different competitions\n• Data is temporarily unavailable"
+            except Exception as e:
+                return f"🤝 *{team1_name.title()} vs {team2_name.title()}*\n\nHead-to-head data temporarily unavailable. Please try:\n• `/last {team1_name}` - for {team1_name.title()}'s last result\n• `/last {team2_name}` - for {team2_name.title()}'s last result"
+        
+        elif len(found_teams) == 1:
+            # Only found one team, ask for clarification
+            team_name = found_teams[0][0]
+            return f"🤝 *Head-to-Head Question*\n\nI found {team_name.title()} in your question. Please specify both teams clearly:\n• \"{team_name} vs [other team] last match\"\n• \"Last match between {team_name} and [other team]\"\n\nExamples:\n• \"Madrid vs Barcelona last match\"\n• \"Arsenal vs Chelsea last result\""
+        
+        else:
+            # No teams found
+            return "🤝 *Head-to-Head Question*\n\nI couldn't identify the teams in your question. Please specify both teams clearly:\n\nExamples:\n• \"Madrid vs Barcelona last match\"\n• \"Arsenal vs Chelsea last result\"\n• \"Last match between Bayern and Dortmund\""
     
     # 1) league table
     if P_STANDINGS.search(text):
