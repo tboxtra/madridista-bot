@@ -16,7 +16,7 @@ SOFA = SofaScoreProvider()
 def tool_next_fixture(args: Dict[str, Any]) -> Dict[str, Any]:
     """Return the nearest upcoming fixture for a team (default Real Madrid)."""
     team_id = args.get("team_id") or resolve_team(args.get("team_name","") or "")
-    matches = fd_team_matches(team_id, status=None, limit=30)
+    matches = fd_team_matches(team_id, status=None, limit=30, window_days=90)
     future = [m for m in matches if m.get("status") in {"SCHEDULED","TIMED"}]
     future.sort(key=lambda x: x["utcDate"])
     if not future:
@@ -28,7 +28,7 @@ def tool_next_fixture(args: Dict[str, Any]) -> Dict[str, Any]:
 def tool_last_result(args: Dict[str, Any]) -> Dict[str, Any]:
     """Return the latest finished result for a team."""
     team_id = args.get("team_id") or resolve_team(args.get("team_name","") or "")
-    ms = fd_team_matches(team_id, status="FINISHED", limit=1)
+    ms = fd_team_matches(team_id, status="FINISHED", limit=1, window_days=180)
     if not ms:
         return {"ok": False, "message": "No recent match found.", "__source": CIT_FD}
     m = ms[0]; ft = (m.get("score",{}) or {}).get("fullTime",{}) or {}
@@ -57,7 +57,7 @@ def tool_form(args: Dict[str, Any]) -> Dict[str, Any]:
     """Return last N finished results for a team (default 5)."""
     team_id = args.get("team_id") or resolve_team(args.get("team_name","") or "")
     k = int(args.get("k",5))
-    ms = fd_team_matches(team_id, status="FINISHED", limit=max(10,k))
+    ms = fd_team_matches(team_id, status="FINISHED", limit=max(10,k), window_days=180)
     out = []
     for m in ms[:k]:
         ft = (m.get("score",{}) or {}).get("fullTime",{}) or {}
@@ -116,46 +116,57 @@ def tool_last_man_of_match(args: Dict[str, Any]) -> Dict[str, Any]:
     except Exception:
         return {"ok": False, "message": "MoM data unavailable.", "__source": CIT_SOFA}
 
+def _is_recent_ts(ts, max_age_days: int = 120):
+    # SofaScore gives startTimestamp (seconds)
+    try:
+        from datetime import datetime, timezone, timedelta
+        dt = datetime.fromtimestamp(int(ts), tz=timezone.utc)
+        return (datetime.now(timezone.utc) - dt) <= timedelta(days=max_age_days)
+    except Exception:
+        return False
+
 def tool_compare_teams(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Compare two teams' recent form (last k) and provide a quick verdict."""
+    """Compare two teams' recent form (last k). Uses SofaScore last events and ignores stale (>120d)."""
     a = args.get("team_a") or "Real Madrid"
     b = args.get("team_b") or "Barcelona"
     k = int(args.get("k", 5))
     ta, tb = resolve_team(a), resolve_team(b)
-    form_a = team_recent_form(ta, limit=k)
-    form_b = team_recent_form(tb, limit=k)
-    
-    # derive simple points: win=3, draw=1, loss=0
-    def pts(hs, as_):
-        if hs > as_:
-            return 3
-        if hs == as_:
-            return 1
+
+    fa = [m for m in team_recent_form(ta, limit=max(10, k)) if _is_recent_ts(m.get("ts"))][:k]
+    fb = [m for m in team_recent_form(tb, limit=max(10, k)) if _is_recent_ts(m.get("ts"))][:k]
+
+    if len(fa) < max(1, k//2) or len(fb) < max(1, k//2):
+        return {"ok": False, "message": "Not enough recent matches to compare (season gap?).", "__source": "SofaScore"}
+
+    def pts(h, a):
+        if h > a: return 3
+        if h == a: return 1
         return 0
-    
-    def sum_pts(arr, team_is_home_pred):
+
+    # naive side detection by comparing team name prefix; you can store team ids if you keep them
+    def sum_pts(arr, team_name: str):
         s = 0
         for m in arr:
-            if team_is_home_pred(m):
+            home = (m["home"] or "").lower()
+            if home.startswith(team_name.lower().split()[0]):
                 s += pts(m["home_score"], m["away_score"])
             else:
                 s += pts(m["away_score"], m["home_score"])
         return s
-    
-    # naive home/away—Sofa recent list includes both; infer with names
-    def is_home_a(m):
-        return (m["home"] or "").lower().startswith(a.lower().split()[0])
-    
-    def is_home_b(m):
-        return (m["home"] or "").lower().startswith(b.lower().split()[0])
-    
-    pa = sum_pts(form_a, is_home_a)
-    pb = sum_pts(form_b, is_home_b)
-    verdict = "edge " + (a if pa >= pb else b) if abs(pa - pb) >= 2 else "too close to call"
-    
-    return {"ok": True, "k": k, "team_a": a, "team_b": b,
-            "points_a": pa, "points_b": pb, "verdict": verdict,
-            "form_a": form_a, "form_b": form_b, "__source": CIT_SOFA}
+
+    pa = sum_pts(fa, a)
+    pb = sum_pts(fb, b)
+    verdict = a if pa > pb + 1 else b if pb > pa + 1 else "too close to call"
+
+    return {
+        "ok": True,
+        "__source": "SofaScore",
+        "k": k,
+        "team_a": a, "team_b": b,
+        "points_a": pa, "points_b": pb,
+        "verdict": verdict,
+        "form_a": fa, "form_b": fb
+    }
 
 def tool_h2h_summary(args: Dict[str, Any]) -> Dict[str, Any]:
     """Head-to-head summary between two teams."""

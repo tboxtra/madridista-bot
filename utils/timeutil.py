@@ -39,3 +39,11 @@ def window_filter(matches: List[Dict[str, Any]], days: int = 2, max_days_cap: in
             continue
     
     return filtered
+
+def is_fresh_iso(iso: str, days=120):
+    """Check if ISO date string is within freshness window"""
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z","+00:00"))
+        return datetime.now(timezone.utc) - dt <= timedelta(days=days)
+    except:
+        return False

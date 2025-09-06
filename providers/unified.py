@@ -1,5 +1,6 @@
 import os
 import requests
+from datetime import datetime, timedelta, timezone
 
 FD_BASE = "https://api.football-data.org/v4"
 FD_KEY = os.getenv("FOOTBALL_DATA_API_KEY")
@@ -7,13 +8,27 @@ S = requests.Session()
 if FD_KEY:
     S.headers.update({"X-Auth-Token": FD_KEY})
 
-def fd_team_matches(team_id: int, status: str = None, limit=20):
-    r = S.get(f"{FD_BASE}/teams/{team_id}/matches", timeout=20)
+def _today_iso():
+    # Use UTC; Railway TZ is set to Africa/Lagos for formatting elsewhere
+    return datetime.now(timezone.utc).date()
+
+def fd_team_matches(team_id: int, status: str = None, limit=20, window_days: int = 120):
+    """
+    Fresh matches only.
+    Football-Data supports dateFrom/dateTo filtering; we default to the last ~4 months.
+    """
+    today = _today_iso()
+    date_from = (today - timedelta(days=window_days)).isoformat()
+    date_to = (today + timedelta(days=7)).isoformat()  # a week into the future for 'next'
+    params = {"dateFrom": date_from, "dateTo": date_to, "limit": 200}
+    r = S.get(f"{FD_BASE}/teams/{team_id}/matches", params=params, timeout=20)
     r.raise_for_status()
     ms = r.json().get("matches", [])
     if status:
         ms = [m for m in ms if m.get("status") == status]
-    return sorted(ms, key=lambda x: x["utcDate"], reverse=True)[:limit]
+    # sort DESC by utcDate (latest first)
+    ms.sort(key=lambda x: x["utcDate"], reverse=True)
+    return ms[:limit]
 
 def fd_comp_table(comp_id: int):
     r = S.get(f"{FD_BASE}/competitions/{comp_id}/standings", timeout=20)

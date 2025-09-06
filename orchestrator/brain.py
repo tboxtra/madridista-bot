@@ -3,8 +3,18 @@ from openai import OpenAI
 from orchestrator import tools as T
 
 CITATIONS_ON = os.getenv("CITATIONS", "true").lower() == "true"
+SAFE_MAX = 900
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def _safe(s: str) -> str: 
+    return (s or "")[:SAFE_MAX].strip()
+
+def _in_scope(q: str) -> bool:
+    q = (q or "").lower()
+    return any(k in q for k in ["football","soccer","match","fixture","goal","assist",
+                                "lineup","laliga","champions","ucl","real madrid","barcelona",
+                                "vinicius","bellingham","ancelotti","bernabeu","form","table","scorers"])
 
 SYSTEM = (
   "You are a friendly, concise football assistant. "
@@ -78,6 +88,12 @@ def _pre_hint(text: str):
 
 def answer_nl_question(text: str) -> str:
     """Natural language in; football answer out (tools + LLM composition)."""
+    text = (text or "").strip()
+    if not text: 
+        return "Ask me any football question (fixtures, live, players, lineups, news)."
+    if not _in_scope(text):
+        return "I'm a football-only assistant. Ask me about matches, players, lineups, standings, or news."
+    
     try:
         hint = _pre_hint(text)
         msgs = [{"role":"system","content": SYSTEM}]
@@ -118,9 +134,9 @@ def answer_nl_question(text: str) -> str:
             out = r2.choices[0].message.content.strip()
             if CITATIONS_ON and sources:
                 out += "\n\n(" + " • ".join(sorted(sources)) + ")"
-            return out
+            return _safe(out)
 
-        return (msg.content or "Can you rephrase that?").strip()
+        return _safe(msg.content or "Can you rephrase that?")
     
     except Exception as e:
         return f"I had trouble processing that request. Please try again or use specific commands like /matches, /table, or /live."

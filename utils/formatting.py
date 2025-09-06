@@ -1,5 +1,9 @@
+import re
+
+# More comprehensive markdown escape pattern
+MD2 = r'[_*[\]()~`>#+\-=|{}.!]'
+
 def md_escape(s: str) -> str:
-    # Telegram Markdown (legacy) special chars: * _ ` [
-    if not isinstance(s, str): return s
-    return s.replace('*','').replace('_','').replace('`','').replace('[','')
+    """Escape markdown special characters for Telegram"""
+    return re.sub(MD2, lambda m: '\\' + m.group(0), s or "")
 

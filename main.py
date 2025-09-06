@@ -5,6 +5,7 @@ from features.matches import matches_handler
 from features.matches_last import last_match_handler
 from features.live import live_handler
 from live.monitor_providers import monitor_tick, POLL_SECONDS
+from settings import validate_env
 
 # Enable logging
 logging.basicConfig(
@@ -244,5 +245,8 @@ class MadridistaBot:
         self.application.run_polling()
 
 if __name__ == "__main__":
+    # Validate environment variables on startup
+    validate_env()
+    
     bot = MadridistaBot()
     bot.run()
