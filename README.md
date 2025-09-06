@@ -1,68 +1,59 @@
-# MadridistaAI — Stage 1 (MVP)
+# MadridistaAI — Football Bot
 
-## What it does
-- Generates Real Madrid / CR7 / Vini content using OpenAI
-- **Primary**: Works as a Telegram bot for interactive conversations
-- **Secondary**: Can post to X/Twitter via API (optional)
+## Quick Start
+1) Copy environment:  
+   ```bash
+   cp .env.example .env
+   ```
+2) Install deps (Python **3.8+**):  
+   ```bash
+   pip install -r requirements.txt
+   ```
+3) Set required variables in `.env` or Railway variables (see below).
+4) Run locally:  
+   ```bash
+   python main.py
+   ```
 
-## Quick Start - Telegram Bot 🚀
+### Railway Deployment
+- This project runs as a **worker** (Telegram polling).  
+- `Procfile`:
+  ```
+  worker: python main.py
+  ```
+- **Required Railway Variables**:
+  - `TZ = Africa/Lagos`
+  - `TELEGRAM_BOT_TOKEN`
+  - `FOOTBALL_DATA_API_KEY`
+  - `OPENAI_API_KEY`
+  - `SOFA_USER_AGENT = Mozilla/5.0 MadridistaBot/1.0`
+  - `SOFA_TEAM_ID = 2817`  # Real Madrid
+  - `RAPIDAPI_KEY` (optional; LiveScore news)
+  - `CITATIONS = true`
+  - `OPENAI_MODEL = gpt-4o-mini` (optional)
 
-### 1. Setup Telegram Bot
-1. Message `@BotFather` on Telegram
-2. Send `/newbot` and follow instructions
-3. Copy your bot token
+### What this bot can do
+- Natural language answers to **any football question** (keeps scope football-only)
+- **Live**, **next**, **last**, **tables**, **scorers**, **injuries**, **squad**
+- **Compare teams** (recent form), **compare players** (per-90), **lineups**, **news**
+- Short, human replies grounded in APIs with source tags: `(SofaScore • Football-Data • LiveScore)`
 
-### 2. Install & Configure
-```bash
-pip install -r requirements.txt
-cp env.example .env
-# Edit .env with your TELEGRAM_BOT_TOKEN and OPENAI_API_KEY
-```
-
-### 3. Run the Bot
-```bash
-python main_telegram.py
-```
-
-### 4. Chat with your bot!
+## Commands
 - `/start` - Welcome message
-- `/tweet` - Generate Real Madrid content
-- `/madrid` - Get club info
-- Just chat about Real Madrid!
+- `/matches` - Next fixture
+- `/lastmatch` - Last result
+- `/live` - Live score
+- `/table` - League standings
+- `/scorers` - Top scorers
+- `/form` - Recent results
+- `/lineups` - Next match lineups
+- `/compare Team A vs Team B` - Compare teams
+- `/compareplayers Player A vs Player B` - Compare players
 
-## Twitter Integration (Optional)
-
-If you want to also post to Twitter:
-1. Get API key from [TwitterAPI.io](https://twitterapi.io/)
-2. Add `TWITTERAPI_KEY` to your `.env`
-3. Run `python main.py` for Twitter posting
-
-## Required Environment Variables
-
-**For Telegram Bot:**
-- `TELEGRAM_BOT_TOKEN` (from @BotFather)
-- `OPENAI_API_KEY` (from OpenAI)
-
-**For Twitter (optional):**
-- `TWITTERAPI_KEY` (from TwitterAPI.io)
-
-## Features
-
-- 🤖 **Interactive Telegram Bot** - Chat and get commands
-- ⚽ **Real Madrid Focused** - Generates club-specific content
-- 🧠 **AI-Powered** - Uses OpenAI for smart responses
-- 📱 **Easy to Use** - Simple commands and natural conversation
-- 🐦 **Twitter Ready** - Can also post to Twitter if configured
-
-## Documentation
-
-- [Telegram Setup Guide](TELEGRAM_SETUP.md) - Detailed Telegram bot setup
-- [Twitter Setup Guide](TWITTERAPI_SETUP.md) - Twitter integration details
-
-## Notes
-
-- Uses [TwitterAPI.io](https://twitterapi.io/) - 100x cheaper than official Twitter API
-- Content is trimmed to fit platform limits
-- Bot responds in real-time to Telegram messages
-
-¡Hala Madrid! 🤍⚽
+## Natural Language Examples
+- "next madrid fixture"
+- "compare madrid vs barcelona form"
+- "vinicius vs bellingham per 90"
+- "madrid news today"
+- "who's injured for real madrid"
+- "laliga table top 5"

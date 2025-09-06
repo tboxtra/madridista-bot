@@ -1,49 +1,35 @@
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any
+import pytz
+from typing import Optional
+
+LAGOS = pytz.timezone("Africa/Lagos")
 
 def now_utc() -> datetime:
-    """Get current UTC datetime"""
     return datetime.now(timezone.utc)
 
-def parse_iso_utc(iso_string: str) -> datetime:
-    """Parse ISO 8601 UTC datetime string"""
-    if iso_string.endswith('Z'):
-        iso_string = iso_string[:-1] + '+00:00'
-    return datetime.fromisoformat(iso_string)
-
-def fmt_abs(iso_string: str) -> str:
-    """Format absolute datetime for display"""
+def parse_iso_utc(iso: str) -> Optional[datetime]:
     try:
-        dt = parse_iso_utc(iso_string)
-        return dt.strftime("%a %d %b %H:%M")
+        # Handle "Z"
+        if iso.endswith("Z"):
+            iso = iso.replace("Z", "+00:00")
+        return datetime.fromisoformat(iso).astimezone(timezone.utc)
     except Exception:
-        return iso_string
+        return None
 
-def to_local(utc_dt: datetime) -> datetime:
-    """Convert UTC datetime to local timezone"""
-    # For now, return as-is. In production, you might want to use a specific timezone
-    return utc_dt
-
-def window_filter(matches: List[Dict[str, Any]], days: int = 2, max_days_cap: int = 7) -> List[Dict[str, Any]]:
-    """Filter matches within a time window"""
-    now = now_utc()
-    cutoff = now + timedelta(days=min(days, max_days_cap))
-    
-    filtered = []
-    for match in matches:
-        try:
-            match_dt = parse_iso_utc(match.get("utcDate", ""))
-            if now <= match_dt <= cutoff:
-                filtered.append(match)
-        except Exception:
-            continue
-    
-    return filtered
-
-def is_fresh_iso(iso: str, days=120):
-    """Check if ISO date string is within freshness window"""
+def to_local(dt: datetime) -> datetime:
     try:
-        dt = datetime.fromisoformat(iso.replace("Z","+00:00"))
-        return datetime.now(timezone.utc) - dt <= timedelta(days=days)
-    except:
+        return dt.astimezone(LAGOS)
+    except Exception:
+        return dt
+
+def fmt_abs(iso: str) -> str:
+    dt = parse_iso_utc(iso) or now_utc()
+    local = to_local(dt)
+    # Example: Sat 13 Sep • 15:15
+    return local.strftime("%a %d %b • %H:%M")
+
+def is_fresh_iso(iso: str, days: int = 120) -> bool:
+    dt = parse_iso_utc(iso)
+    if not dt:
         return False
+    return (now_utc() - dt) <= timedelta(days=days)
