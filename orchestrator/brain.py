@@ -6,12 +6,15 @@ from orchestrator import tools_ext as TX
 from utils.banter_ai import ai_banter
 
 STRICT_FACTS = os.getenv("STRICT_FACTS","true").lower() == "true"
+HISTORY_ON = os.getenv("HISTORY_ENABLE","true").lower() == "true"
+LOG_TOOL_CALLS = os.getenv("LOG_TOOL_CALLS","true").lower() == "true"
 
 FACTY_HINTS = (
   "when","what time","score","result","fixture","lineup","xi","injury","table","standings",
   "scorer","goals","assists","rating","compare","vs","versus","h2h","news","transfer",
   "prediction","predict","odds","form","last match","next match","today","yesterday","tomorrow",
-  "year","season","final","history","historical","record","formation","tactics"
+  "year","season","final","finals","history","historical","record","formation","tactics",
+  "winner","winners","champion","champions"
 )
 
 def _looks_factual(q: str) -> bool:
@@ -152,6 +155,8 @@ FUNCTIONS = [
    "parameters":{"type":"object","properties":{}}},
   {"name":"tool_history_lookup","description":"Look up football history from Wikipedia",
    "parameters":{"type":"object","properties":{"query":{"type":"string"}}}},
+  {"name":"tool_ucl_last_n_winners","description":"Last N UCL winners from Wikipedia finals list",
+   "parameters":{"type":"object","properties":{"n":{"type":"integer"}}}},
   {"name":"tool_af_next_fixture","description":"Next fixture via API-Football","parameters":{"type":"object","properties":{"team_id":{"type":"integer"}}}},
   {"name":"tool_af_last_result","description":"Last finished via API-Football","parameters":{"type":"object","properties":{"team_id":{"type":"integer"}}}},
   {"name":"tool_sofa_form","description":"Recent form via SofaScore","parameters":{"type":"object","properties":{"team_id":{"type":"integer"},"k":{"type":"integer"}}}},
@@ -183,6 +188,7 @@ NAME_TO_FUNC = {
   "tool_predict_fixture": T.tool_predict_fixture,
   "tool_rm_ucl_titles": TH.tool_rm_ucl_titles,
   "tool_history_lookup": TH.tool_history_lookup,
+  "tool_ucl_last_n_winners": TH.tool_ucl_last_n_winners,
   "tool_af_next_fixture": TX.tool_af_next_fixture,
   "tool_af_last_result": TX.tool_af_last_result,
   "tool_sofa_form": TX.tool_sofa_form,
@@ -196,6 +202,8 @@ NAME_TO_FUNC = {
 # Optional: very light pre-router to hint the model
 def _pre_hint(text: str):
     t = (text or "").lower()
+    if any(x in t for x in ["last 5 ucl", "last five ucl", "ucl winners", "recent champions league winners", "last 5 champions league winners"]):
+        return "Use tool_ucl_last_n_winners first, then summarize."
     if any(w in t for w in ["compare", "vs", "versus", "h2h","head to head"]):
         return "Use tool_compare_teams or tool_compare_players for comparisons; call tools before answering."
     if any(w in t for w in ["lineup", "line-ups", "line up", "xi", "starting eleven"]):
@@ -242,6 +250,8 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
         msgs = [{"role":"system","content": SYSTEM}, *FEWSHOT]
         if hint:
             msgs.append({"role":"system","content": hint})
+        if HISTORY_ON and _looks_historical(text):
+            msgs.append({"role":"system","content":"This looks historical. You MUST call a history tool (tool_history_lookup or tool_ucl_last_n_winners) before answering."})
         if context_summary:
             msgs.append({"role":"system","content": f"Context: {context_summary}"})
         if text.startswith("(Conversation summary context"):
@@ -266,7 +276,7 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
         if needs_facts and not getattr(msg, "tool_calls", None):
             # Determine specific tool needed
             if needs_history:
-                tool_hint = "This is a historical query. You MUST use tool_history_lookup or tool_rm_ucl_titles to get Wikipedia data before answering."
+                tool_hint = "This is a historical query. You MUST use tool_history_lookup or tool_ucl_last_n_winners to get Wikipedia data before answering."
             else:
                 tool_hint = "This is a factual query. You MUST call at least one appropriate tool before answering."
             
@@ -277,17 +287,14 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                 tools=[{"type":"function","function": f} for f in FUNCTIONS],
                 tool_choice="auto",
                 temperature=0.2,
-                max_tokens=200,
+                max_tokens=220,
                 timeout=30
             )
             msg = r.choices[0].message
 
         # Final fallback for strict mode
         if needs_facts and not getattr(msg, "tool_calls", None) and STRICT_FACTS:
-            if needs_history:
-                return "I need to look up historical data for that. Try asking about specific years, tournaments, or use commands like /matches, /live, /lastmatch for current info."
-            else:
-                return "I can't verify that without live data. Ask me again with a specific team/match or try commands like /matches, /live, /lastmatch."
+            return "I can't verify that without external data. Try again with a bit more detail."
         if msg.tool_calls:
             # Support multiple tool calls (e.g., compare both + h2h)
             tool_msgs = []
@@ -296,6 +303,8 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             for tc in msg.tool_calls:
                 name = tc.function.name
                 args = json.loads(tc.function.arguments or "{}")
+                if LOG_TOOL_CALLS:
+                    print(f"[tools] calling {name} with {args}")
                 fn = NAME_TO_FUNC.get(name)
                 result = fn(args) if fn else {"ok": False, "message": "Unknown tool"}
                 results_payloads.append(result)
