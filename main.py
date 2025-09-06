@@ -162,6 +162,7 @@ async def text_router(update, context):
         context_prefix = f"(Conversation summary context, keep consistent with this recent thread; don't repeat):\n{ctx['summary']}\n\n"
 
     user_q = (msg.text or "").strip()
+    print(f"[text_router] got: {user_q[:200]}")
     reply = answer_nl_question(context_prefix + user_q)
 
     # Quote reply in groups to provide threading

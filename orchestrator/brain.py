@@ -311,7 +311,7 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
 
         def _run_call(name, args):
             if LOG_TOOL_CALLS: 
-                print(f"[arbiter] trying {name} with {args}")
+                print(f"[tools] calling {name} args={args}")
             fn = NAME_TO_FUNC.get(name)
             res = fn(args or {}) if fn else {"ok": False, "message": "Unknown tool"}
             src = res.get("__source")
@@ -321,6 +321,26 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             return res
 
         needs_facts = _looks_factual(text)
+        
+        # FORCE a retry if no tools were selected for factual queries
+        if needs_facts and not getattr(msg, "tool_calls", None):
+            if LOG_TOOL_CALLS:
+                print(f"[brain] Forcing tool retry for factual query: {text[:100]}")
+            msgs.insert(1, {"role":"system","content":
+                "This is a factual football query. You MUST call at least one tool (fixtures/results/H2H/history) before answering."})
+            r = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=msgs,
+                tools=[{"type":"function","function": f} for f in FUNCTIONS],
+                tool_choice="auto",
+                temperature=0.2,
+                max_tokens=220
+            )
+            msg = r.choices[0].message
+        
+        if needs_facts and not getattr(msg, "tool_calls", None) and STRICT_FACTS:
+            return "I can't verify that without external data."
+            
         if not getattr(msg, "tool_calls", None) and needs_facts:
             # 1) Planned cascade: try likely tools in order until one yields non-empty, valid data
             for tool_name in plan_tools(text):
@@ -379,4 +399,8 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
         return _safe(msg.content or "Can you rephrase that?")
     
     except Exception as e:
+        if LOG_TOOL_CALLS:
+            print(f"[brain] Exception: {e}")
+            import traceback
+            traceback.print_exc()
         return f"I had trouble processing that request. Please try again or use specific commands like /matches, /table, or /live."
