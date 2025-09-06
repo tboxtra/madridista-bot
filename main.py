@@ -212,13 +212,21 @@ class MadridistaBot:
         )
     
     async def handle_message(self, update, context):
-        """Handle general messages about Real Madrid"""
+        """Handle general messages with natural language processing"""
         msg = update.message
         if not msg or not msg.text or msg.from_user.is_bot:
             return
         text = msg.text.strip()
 
-        # 1) try football intents
+        # 1) Try the new LLM orchestrator for natural language
+        try:
+            from orchestrator.brain import answer_nl_question
+            reply = answer_nl_question(text)
+            return await msg.reply_text(reply, parse_mode="Markdown", disable_web_page_preview=False)
+        except Exception as e:
+            logger.warning(f"Orchestrator error: {e}")
+
+        # 2) Fallback to existing football router
         try:
             from features.router_football import route_football
             ans = route_football(text)
@@ -227,17 +235,8 @@ class MadridistaBot:
         except Exception as e:
             logger.warning(f"Football router error: {e}")
 
-        # 2) existing known commands/intents (if you have a separate router)
-        try:
-            from features.router_extra import route_related
-            specific_answer = route_related(text)
-            if specific_answer:
-                return await msg.reply_text(specific_answer, parse_mode="Markdown")
-        except Exception as e:
-            logger.warning(f"Router error: {e}")
-
-        # 3) free-chat or refusal fallback
-        return await msg.reply_text("I focus on football. Try: /live, /matches, /lastmatch, table, form, scorers.")
+        # 3) Final fallback
+        return await msg.reply_text("I had trouble understanding that. Try asking about fixtures, tables, form, or use commands like /matches, /table, /live.")
     
     def run(self):
         """Run the bot"""

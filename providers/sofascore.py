@@ -124,3 +124,30 @@ class SofaScoreProvider:
     def short_event_line(self, event):
         minute = f"{event['minute']}'" if event.get("minute") else ""
         return f"**LIVE** {minute}\n{event['homeName']} {event['homeScore']} – {event['awayScore']} {event['awayName']}\n{event['competition']}"
+
+    def team_injuries(self):
+        """Get team injuries/unavailable players"""
+        try:
+            # This would need to be implemented based on SofaScore API
+            # For now, return empty data
+            return {"players": []}
+        except Exception:
+            return {"players": []}
+
+    def team_squad(self):
+        """Get team squad"""
+        try:
+            # This would need to be implemented based on SofaScore API
+            # For now, return empty data
+            return {"players": []}
+        except Exception:
+            return {"players": []}
+
+    def event_best_player(self, event_id):
+        """Get best player/Man of the Match for an event"""
+        try:
+            # This would need to be implemented based on SofaScore API
+            # For now, return None
+            return None
+        except Exception:
+            return None
