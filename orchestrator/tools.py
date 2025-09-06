@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional
+import json, os
 from providers.unified import fd_team_matches, fd_comp_table, fd_comp_scorers
 from providers.sofascore import SofaScoreProvider, player_search, player_season_stats, team_h2h, team_recent_form, team_next_event, event_lineups
 from providers.news import news_soccer
@@ -328,3 +329,22 @@ def tool_next_lineups(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "__source": CIT_SOFA,
             "event": {"home": ev.get("homeTeam", {}).get("name"), "away": ev.get("awayTeam", {}).get("name")},
             "home": home, "away": away}
+
+# Knowledge base tool
+GLOSSARY_PATH = os.path.join(os.path.dirname(__file__), "..", "kb", "glossary.json")
+
+def tool_glossary(args: Dict[str, Any]) -> Dict[str, Any]:
+    term = (args.get("term") or "").strip().lower()
+    try:
+        with open(GLOSSARY_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if term in data:
+            return {"ok": True, "__source": "KB", "term": term, "definition": data[term]}
+        # fuzzy search
+        hits = [k for k in data.keys() if term and term in k]
+        if hits:
+            hit = hits[0]
+            return {"ok": True, "__source": "KB", "term": hit, "definition": data[hit]}
+        return {"ok": False, "__source": "KB", "message": "Term not found"}
+    except Exception:
+        return {"ok": False, "__source": "KB", "message": "Glossary unavailable"}

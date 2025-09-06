@@ -11,19 +11,24 @@ def _safe(s: str) -> str:
     return (s or "")[:SAFE_MAX].strip()
 
 def _in_scope(q: str) -> bool:
-    q = (q or "").lower()
-    return any(k in q for k in ["football","soccer","match","fixture","goal","assist",
-                                "lineup","laliga","champions","ucl","real madrid","barcelona",
-                                "vinicius","bellingham","ancelotti","bernabeu","form","table","scorers"])
+    ql = (q or "").lower()
+    football_terms = (
+        "football","soccer","match","fixture","goal","assist","lineup","line up","xi",
+        "premier","laliga","ucl","champions","league","table","standings","scorers",
+        "injury","squad","h2h","compare","form","live","result","score",
+        "news","headline","rumor","transfer","tactic","tactics","formation",
+        "offside","var","history","legend","coach","manager","pressing","counter","xg",
+        "real madrid","madrid","barca","barcelona","bernabeu","vinicius","bellingham","ancelotti","mbapp"
+    )
+    return any(t in ql for t in football_terms)
 
 SYSTEM = (
   "You are a friendly, concise football assistant. "
-  "Scope is strictly football (clubs, leagues, players, fixtures, rules). "
-  "Use the provided tools for any facts (scores, fixtures, standings, injuries, squads, scorers, live). "
-  "If a question is about football concepts (rules/history) and no tool is required, answer briefly. "
-  "If the user asks outside football, decline politely and offer football topics. "
-  "Keep answers under ~120 words unless the user asks for detail. "
-  "Always prefer Real Madrid and LaLiga when ambiguous."
+  "Use the tools for factual queries (live scores, fixtures, standings, injuries, squads, scorers, lineups, stats, news). "
+  "When the user asks about rules, tactics, roles, training, history, or explanations that do not need live data, "
+  "answer directly in your own words—clearly and briefly. "
+  "Keep answers under ~120 words unless asked for more. "
+  "Scope remains football-only; politely decline off-topic."
 )
 
 # Tool schemas for function calling (names must match T.* function names)
@@ -52,7 +57,9 @@ FUNCTIONS = [
   }},
   {"name":"tool_next_lineups","description":"Probable or confirmed lineups for the next match","parameters":{
     "type":"object","properties":{"team_name":{"type":"string"},"team_id":{"type":"integer"}}}
-  }
+  },
+  {"name":"tool_glossary","description":"Explain football terms, rules, tactics from internal KB",
+   "parameters":{"type":"object","properties":{"term":{"type":"string"}}}}
 ]
 
 NAME_TO_FUNC = {
@@ -71,6 +78,7 @@ NAME_TO_FUNC = {
   "tool_news": T.tool_news,
   "tool_compare_players": T.tool_compare_players,
   "tool_next_lineups": T.tool_next_lineups,
+  "tool_glossary": T.tool_glossary,
 }
 
 # Optional: very light pre-router to hint the model
@@ -84,6 +92,8 @@ def _pre_hint(text: str):
         return "You may need tool_player_stats or tool_compare_players."
     if any(w in t for w in ["news", "headline", "rumor"]):
         return "You may need tool_news."
+    if any(w in t for w in ["what is", "explain", "meaning of", "define", "how does", "how do"]):
+        return "You may need tool_glossary if this is a rules/tactics/term question."
     return None
 
 def answer_nl_question(text: str) -> str:
@@ -96,7 +106,12 @@ def answer_nl_question(text: str) -> str:
     
     try:
         hint = _pre_hint(text)
-        msgs = [{"role":"system","content": SYSTEM}]
+        FEWSHOT = [
+            {"role":"system","content":"Style: friendly, concise, 1–3 short paragraphs max, use bullets only when helpful."},
+            {"role":"user","content":"Explain xG quickly."},
+            {"role":"assistant","content":"xG (expected goals) estimates how likely a shot is to become a goal. A tap-in might be 0.6–0.7 xG; a 30-yarder maybe 0.03. Over time, xG shows chance quality better than raw shots."},
+        ]
+        msgs = [{"role":"system","content": SYSTEM}, *FEWSHOT]
         if hint:
             msgs.append({"role":"system","content": hint})
         msgs.append({"role":"user","content": text})
