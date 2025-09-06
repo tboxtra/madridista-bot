@@ -1,7 +1,23 @@
-import os, json
+import os, json, re
 from openai import OpenAI
 from orchestrator import tools as T
+from orchestrator import tools_history as TH
 from utils.banter_ai import ai_banter
+
+STRICT_FACTS = os.getenv("STRICT_FACTS","true").lower() == "true"
+
+FACTY_HINTS = (
+  "when","what time","score","result","fixture","lineup","xi","injury","table","standings",
+  "scorer","goals","assists","rating","compare","vs","versus","h2h","news","transfer",
+  "prediction","predict","odds","form","last match","next match","today","yesterday","tomorrow",
+  "year","season","final","history","historical","record"
+)
+
+def _looks_factual(q: str) -> bool:
+    ql = (q or "").lower()
+    if re.search(r"\b(19[0-9]{2}|20[0-2][0-9])\b", ql):  # years
+        return True
+    return any(k in ql for k in FACTY_HINTS)
 
 CITATIONS_ON = os.getenv("CITATIONS", "true").lower() == "true"
 SAFE_MAX = 900
@@ -27,18 +43,25 @@ def _facts_from_toolpayload(payloads):
     facts = []
     for p in payloads:
         if not isinstance(p, dict): continue
-        if p.get("when") and p.get("home") and p.get("away") and "home_score" in p:
-            facts.append(f"Last match: {p['home']} {p['home_score']}-{p['away_score']} {p['away']} on {p['when']}")
+        if p.get("when") and p.get("home") and p.get("away"):
+            if "home_score" in p:
+                facts.append(f"Last match: {p['home']} {p['home_score']}-{p['away_score']} {p['away']} on {p['when']}")
+            else:
+                facts.append(f"Next match: {p['home']} vs {p['away']} on {p['when']}")
         if p.get("points_a") is not None and p.get("points_b") is not None:
-            facts.append(f"Form points last {p.get('k',5)}: {p.get('team_a','A')}={p['points_a']}, {p.get('team_b','B')}={p['points_b']}")
+            facts.append(f"Form (last {p.get('k',5)}): {p.get('team_a','A')}={p['points_a']}, {p.get('team_b','B')}={p['points_b']}")
+        if p.get("rows") and "pts" in p["rows"][0]:
+            lead = p["rows"][0]; facts.append(f"Top of table: {lead['team']} {lead['pts']} pts")
+        if p.get("items") and p["items"] and "title" in p["items"][0]:
+            facts.append("News feed active today")
+        if p.get("name") and ("rating" in p or "minutes" in p or "goals" in p):
+            # player stats tool
+            mins = p.get("minutes"); g = p.get("goals"); a = p.get("assists")
+            if g is not None or a is not None:
+                facts.append(f"{p['name']} stats: {g or 0}g, {a or 0}a" + (f" in {mins}m" if mins else ""))
         if p.get("event") and p["event"].get("home") and p["event"].get("away"):
             facts.append(f"Lineups for {p['event']['home']} vs {p['event']['away']} possibly available")
-        if p.get("rows") and len(p["rows"]) and "pts" in p["rows"][0]:
-            top = p["rows"][0]
-            facts.append(f"Table leader: {top['team']} on {top['pts']} pts")
-        if p.get("items") and len(p["items"]) and "title" in p["items"][0]:
-            facts.append("News feed active")
-    return facts
+    return facts[:10]
 
 def _in_scope(q: str) -> bool:
     ql = (q or "").lower()
@@ -54,12 +77,13 @@ def _in_scope(q: str) -> bool:
     return any(t in ql for t in football_terms)
 
 SYSTEM = (
-  "You are a friendly, concise football assistant. "
-  "Use the tools for factual queries (live scores, fixtures, standings, injuries, squads, scorers, lineups, stats, news). "
-  "When the user asks about rules, tactics, roles, training, history, or explanations that do not need live data, "
-  "answer directly in your own words—clearly and briefly. "
-  "Keep answers under ~120 words unless asked for more. "
-  "Scope remains football-only; politely decline off-topic."
+  "You are a Real Madrid superfan assistant with a cheeky, confident tone. "
+  "For ANY factual content (scores, fixtures, lineups, standings, injuries, scorers, player stats, news, history): "
+  "you MUST call the provided tools first and ground the answer in their outputs. "
+  "Do NOT invent stats or dates. If tools return nothing and STRICT_FACTS=true, say you can't verify. "
+  "For rules/tactics/history explanations, you may write briefly, "
+  "but if a year, season, or specific match is referenced, use the history tool. "
+  "Prefer Real Madrid & LaLiga. Be concise (1–3 short paragraphs). Keep banter clean."
 )
 
 # Tool schemas for function calling (names must match T.* function names)
@@ -94,7 +118,11 @@ FUNCTIONS = [
   {"name":"tool_next_fixtures_multi","description":"Next fixtures for multiple teams",
    "parameters":{"type":"object","properties":{"team_names":{"type":"array","items":{"type":"string"}}}}},
   {"name":"tool_predict_fixture","description":"Fan-style score prediction for next match",
-   "parameters":{"type":"object","properties":{"team_name":{"type":"string"}}}}
+   "parameters":{"type":"object","properties":{"team_name":{"type":"string"}}}},
+  {"name":"tool_rm_ucl_titles","description":"Real Madrid UEFA Champions League titles and history",
+   "parameters":{"type":"object","properties":{}}},
+  {"name":"tool_history_lookup","description":"Look up football history from Wikipedia",
+   "parameters":{"type":"object","properties":{"query":{"type":"string"}}}}
 ]
 
 NAME_TO_FUNC = {
@@ -116,19 +144,27 @@ NAME_TO_FUNC = {
   "tool_glossary": T.tool_glossary,
   "tool_next_fixtures_multi": T.tool_next_fixtures_multi,
   "tool_predict_fixture": T.tool_predict_fixture,
+  "tool_rm_ucl_titles": TH.tool_rm_ucl_titles,
+  "tool_history_lookup": TH.tool_history_lookup,
 }
 
 # Optional: very light pre-router to hint the model
 def _pre_hint(text: str):
-    t = text.lower()
-    if any(w in t for w in ["compare", "vs", "versus"]):
-        return "You may need tool_compare_teams or tool_h2h_summary or tool_compare_players."
+    t = (text or "").lower()
+    if any(w in t for w in ["compare", "vs", "versus", "h2h","head to head"]):
+        return "Use tool_compare_teams or tool_compare_players for comparisons; call tools before answering."
     if any(w in t for w in ["lineup", "line-ups", "line up", "xi", "starting eleven"]):
-        return "You may need tool_next_lineups."
+        return "Use tool_next_lineups; call tools before answering."
     if any(w in t for w in ["stats", "per 90", "goals", "assists", "rating"]):
-        return "You may need tool_player_stats or tool_compare_players."
-    if any(w in t for w in ["news", "headline", "rumor"]):
-        return "You may need tool_news."
+        return "Use tool_player_stats or tool_compare_players; call tools before answering."
+    if any(w in t for w in ["news", "headline", "rumor", "transfer"]):
+        return "Use tool_news; call tools before answering."
+    if re.search(r"\b(19[0-9]{2}|20[0-2][0-9])\b", t) or "history" in t or "season" in t:
+        return "Use tool_history_lookup first for historical details."
+    if "fixture" in t or "next match" in t or "who do" in t and "play" in t:
+        return "Use tool_next_fixture or tool_next_fixtures_multi; call tools before answering."
+    if "last match" in t or "result" in t or "score" in t:
+        return "Use tool_last_result or tool_live_now; call tools before answering."
     if any(w in t for w in ["what is", "explain", "meaning of", "define", "how does", "how do"]):
         return "You may need tool_glossary if this is a rules/tactics/term question."
     if "fixture" in t and ((" and " in t) or "both" in t or "two teams" in t):
@@ -169,7 +205,25 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             max_tokens=220
         )
 
+        needs_facts = _looks_factual(text)
         msg = r.choices[0].message
+
+        if needs_facts and not getattr(msg, "tool_calls", None):
+            # Force tool selection: ask again with a stronger instruction
+            msgs.insert(1, {"role":"system","content":"This is a factual/dated football query. You MUST call at least one tool before answering."})
+            r = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=msgs,
+                tools=[{"type":"function","function": f} for f in FUNCTIONS],
+                tool_choice="auto",
+                temperature=0.2,
+                max_tokens=200,
+                timeout=30
+            )
+            msg = r.choices[0].message
+
+        if needs_facts and not getattr(msg, "tool_calls", None) and STRICT_FACTS:
+            return "I can't verify that without live data. Ask me again with a specific team/match or try commands like /matches, /live, /lastmatch."
         if msg.tool_calls:
             # Support multiple tool calls (e.g., compare both + h2h)
             tool_msgs = []
