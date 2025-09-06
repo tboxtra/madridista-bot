@@ -203,3 +203,26 @@ def team_recent_form(team_id: int, limit: int = 5) -> list[dict]:
         return out
     except Exception:
         return []
+
+# --- NEXT EVENT (nearest scheduled) ---
+def team_next_event(team_id: int | None = None) -> dict | None:
+    """Get team's next scheduled event"""
+    try:
+        tid = int(team_id or TEAM_ID)
+        js = _get(f"/team/{tid}/events/next/0")  # upcoming pages; 0 is soonest set
+        evs = js.get("events") or []
+        if not evs:
+            return None
+        # pick nearest by startTimestamp
+        evs.sort(key=lambda e: e.get("startTimestamp") or 1e12)
+        return evs[0]
+    except Exception:
+        return None
+
+# --- LINEUPS FOR EVENT ---
+def event_lineups(event_id: int | str) -> dict:
+    """Get lineups for a specific event"""
+    try:
+        return _get(f"/event/{event_id}/lineups")
+    except Exception:
+        return {}

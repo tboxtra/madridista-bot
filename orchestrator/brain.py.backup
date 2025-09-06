@@ -42,7 +42,7 @@ FUNCTIONS = [
   }},
   {"name":"tool_next_lineups","description":"Probable or confirmed lineups for the next match","parameters":{
     "type":"object","properties":{"team_name":{"type":"string"},"team_id":{"type":"integer"}}}
-  }
+  }},
 ]
 
 NAME_TO_FUNC = {
