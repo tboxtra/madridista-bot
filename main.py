@@ -1,10 +1,15 @@
 import os
 from typing import Optional
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram import Update
 from orchestrator.brain import answer_nl_question
 from orchestrator.tools import (
     tool_next_fixture, tool_last_result, tool_live_now, tool_table, tool_form, tool_scorers,
     tool_next_lineups, tool_compare_teams, tool_compare_players
+)
+from utils.context import (
+    get_chat_context, add_to_context, should_respond_in_group, 
+    extract_context_summary, is_group_chat, is_private_chat
 )
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -120,10 +125,63 @@ async def cmd_predict(update, context):
     else:
         await update.message.reply_text(res.get("message", "No match to predict."))
 
-async def text_router(update, context):
-    q = (update.message.text or "").strip()
-    reply = answer_nl_question(q)
-    await update.message.reply_text(reply, disable_web_page_preview=False)
+async def text_router(update: Update, context):
+    """Enhanced text router with conversation context awareness."""
+    message = update.message
+    if not message or not message.text:
+        return
+    
+    chat_id = message.chat_id
+    chat_type = message.chat.type
+    user_id = message.from_user.id if message.from_user else None
+    username = message.from_user.username if message.from_user else None
+    text = message.text.strip()
+    
+    # Check if bot is mentioned (for group chats)
+    bot_mentioned = False
+    if is_group_chat(chat_type):
+        bot_username = context.bot.username
+        if bot_username and f"@{bot_username}" in text:
+            bot_mentioned = True
+            # Remove mention from text for processing
+            text = text.replace(f"@{bot_username}", "").strip()
+    
+    # Add message to context
+    add_to_context(chat_id, {
+        "user_id": user_id,
+        "username": username,
+        "text": text,
+        "is_bot": False
+    })
+    
+    # Determine if bot should respond
+    should_respond = False
+    if is_private_chat(chat_type):
+        # Always respond in private chats
+        should_respond = True
+    elif is_group_chat(chat_type):
+        # Use context-aware logic for group chats
+        should_respond = should_respond_in_group(chat_id, text, bot_mentioned)
+    
+    if not should_respond:
+        return
+    
+    # Get conversation context
+    context_summary = extract_context_summary(chat_id)
+    
+    # Generate response
+    reply = answer_nl_question(text, context_summary)
+    
+    # Send response
+    sent_message = await message.reply_text(reply, disable_web_page_preview=False)
+    
+    # Add bot's response to context
+    add_to_context(chat_id, {
+        "user_id": context.bot.id,
+        "username": context.bot.username,
+        "text": reply,
+        "is_bot": True
+    })
 
 def main():
     app = Application.builder().token(TOKEN).build()

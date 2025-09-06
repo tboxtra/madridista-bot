@@ -135,7 +135,7 @@ def _pre_hint(text: str):
         return "You may need tool_next_fixtures_multi."
     return None
 
-def answer_nl_question(text: str) -> str:
+def answer_nl_question(text: str, context_summary: str = "") -> str:
     """Natural language in; football answer out (tools + LLM composition)."""
     text = (text or "").strip()
     if not text: 
@@ -153,6 +153,8 @@ def answer_nl_question(text: str) -> str:
         msgs = [{"role":"system","content": SYSTEM}, *FEWSHOT]
         if hint:
             msgs.append({"role":"system","content": hint})
+        if context_summary:
+            msgs.append({"role":"system","content": f"Context: {context_summary}"})
         msgs.append({"role":"user","content": text})
 
         r = client.chat.completions.create(
