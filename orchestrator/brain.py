@@ -64,7 +64,7 @@ NAME_TO_FUNC = {
 }
 
 # Optional: very light pre-router to hint the model
-def _pre_hint(text: str) -> str | None:
+def _pre_hint(text: str):
     t = text.lower()
     if any(w in t for w in ["compare", "vs", "versus"]):
         return "You may need tool_compare_teams or tool_h2h_summary or tool_compare_players."

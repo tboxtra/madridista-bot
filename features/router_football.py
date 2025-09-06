@@ -9,7 +9,7 @@ P_NEXT = re.compile(r"\b(next|upcoming|fixture|game)\b", re.I)
 P_LAST = re.compile(r"\b(last|previous|recent)\b.*\b(match|game|score|result)\b", re.I)
 P_SCORERS = re.compile(r"\b(top\s*scorers?|goalscorers?)\b", re.I)
 
-def route_football(text: str) -> str | None:
+def route_football(text: str):
     if P_STANDINGS.search(text):
         cid = resolve_comp(text)
         try:

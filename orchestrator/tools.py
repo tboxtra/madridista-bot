@@ -215,7 +215,7 @@ def tool_news(args: Dict[str, Any]) -> Dict[str, Any]:
     rows = [{"title": a.get("title"), "source": a.get("source"), "url": a.get("url")} for a in arts[:5]]
     return {"ok": True, "items": rows, "__source": CIT_LS}
 
-def _per90(total: float | int | None, minutes: float | int | None) -> float | None:
+def _per90(total, minutes):
     """Calculate per-90 statistics"""
     try:
         t = float(total or 0.0)

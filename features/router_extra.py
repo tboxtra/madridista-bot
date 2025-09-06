@@ -1,4 +1,4 @@
-def route_related(text: str) -> str | None:
+def route_related(text: str):
     """Route related Real Madrid questions"""
     text_lower = text.lower()
     

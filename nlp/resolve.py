@@ -19,7 +19,7 @@ COMP_ALIASES = {
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.lower().strip())
 
-def resolve_team(text: str) -> int | None:
+def resolve_team(text: str):
     t = _norm(text)
     for alias, tid in TEAM_ALIASES.items():
         if alias in t:
@@ -27,7 +27,7 @@ def resolve_team(text: str) -> int | None:
     # default to Madrid if the user didn't name a team
     return 86
 
-def resolve_comp(text: str) -> int | None:
+def resolve_comp(text: str):
     t = _norm(text)
     for alias, cid in COMP_ALIASES.items():
         if alias in t:
@@ -36,7 +36,7 @@ def resolve_comp(text: str) -> int | None:
     return 2014
 
 # Simple player normalizer (pass-through if unknown)
-def resolve_player_name(text: str) -> str | None:
+def resolve_player_name(text: str):
     t = _norm(text)
     # common aliases
     if "cr7" in t or "ronaldo" in t:

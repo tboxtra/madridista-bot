@@ -152,7 +152,7 @@ class SofaScoreProvider:
         except Exception:
             return None
 
-def player_search(name: str) -> dict | None:
+def player_search(name: str):
     """Search for a player by name"""
     try:
         # Sofascore search endpoint pattern
@@ -170,7 +170,7 @@ def player_overview(player_id: int) -> dict:
     except Exception:
         return {}
 
-def player_season_stats(player_id: int, season_id: int | None = None) -> dict:
+def player_season_stats(player_id: int, season_id=None):
     """Get player season stats"""
     try:
         # Season id optional; many endpoints return current season aggregates
@@ -186,7 +186,7 @@ def team_h2h(team_a_id: int, team_b_id: int) -> dict:
     except Exception:
         return {}
 
-def team_recent_form(team_id: int, limit: int = 5) -> list[dict]:
+def team_recent_form(team_id: int, limit: int = 5):
     """Get team's recent form"""
     try:
         js = _get(f"/team/{team_id}/events/last/0")
@@ -205,7 +205,7 @@ def team_recent_form(team_id: int, limit: int = 5) -> list[dict]:
         return []
 
 # --- NEXT EVENT (nearest scheduled) ---
-def team_next_event(team_id: int | None = None) -> dict | None:
+def team_next_event(team_id=None):
     """Get team's next scheduled event"""
     try:
         tid = int(team_id or TEAM_ID)
@@ -220,7 +220,7 @@ def team_next_event(team_id: int | None = None) -> dict | None:
         return None
 
 # --- LINEUPS FOR EVENT ---
-def event_lineups(event_id: int | str) -> dict:
+def event_lineups(event_id):
     """Get lineups for a specific event"""
     try:
         return _get(f"/event/{event_id}/lineups")

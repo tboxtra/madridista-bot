@@ -4,7 +4,7 @@ import requests
 RAPID_KEY = os.getenv("RAPIDAPI_KEY")
 LS_URL = "https://livescore6.p.rapidapi.com/news/list"
 
-def news_soccer(category: str = "soccer", limit: int = 10) -> list[dict]:
+def news_soccer(category: str = "soccer", limit: int = 10):
     """Get soccer news from LiveScore via RapidAPI"""
     if not RAPID_KEY:
         return []

@@ -7,7 +7,7 @@ S = requests.Session()
 if FD_KEY:
     S.headers.update({"X-Auth-Token": FD_KEY})
 
-def fd_team_matches(team_id: int, status: str | None = None, limit=20):
+def fd_team_matches(team_id: int, status: str = None, limit=20):
     r = S.get(f"{FD_BASE}/teams/{team_id}/matches", timeout=20)
     r.raise_for_status()
     ms = r.json().get("matches", [])
