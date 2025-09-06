@@ -11,7 +11,7 @@ FACTY_HINTS = (
   "when","what time","score","result","fixture","lineup","xi","injury","table","standings",
   "scorer","goals","assists","rating","compare","vs","versus","h2h","news","transfer",
   "prediction","predict","odds","form","last match","next match","today","yesterday","tomorrow",
-  "year","season","final","history","historical","record"
+  "year","season","final","history","historical","record","formation","tactics"
 )
 
 def _looks_factual(q: str) -> bool:
@@ -19,6 +19,18 @@ def _looks_factual(q: str) -> bool:
     if re.search(r"\b(19[0-9]{2}|20[0-2][0-9])\b", ql):  # years
         return True
     return any(k in ql for k in FACTY_HINTS)
+
+def _looks_historical(q: str) -> bool:
+    """Detect historical queries that need Wikipedia/history tools."""
+    ql = (q or "").lower()
+    return (
+        re.search(r"\b(19[0-9]{2}|20[0-2][0-9])\b", ql) or
+        any(w in ql for w in [
+            "history", "winner", "winners", "champions", "finals", "decade", 
+            "legend", "record", "records", "past", "previous", "last", "first",
+            "ever", "all time", "historic", "classic", "famous", "notable"
+        ])
+    )
 
 CITATIONS_ON = os.getenv("CITATIONS", "true").lower() == "true"
 SAFE_MAX = 900
@@ -88,12 +100,18 @@ def _in_scope(q: str) -> bool:
     return any(t in ql for t in football_terms)
 
 SYSTEM = (
-  "You are a Real Madrid superfan assistant with a cheeky, confident tone. "
-  "For ANY factual content (scores, fixtures, lineups, standings, injuries, scorers, player stats, news, history): "
-  "you MUST call the provided tools first and ground the answer in their outputs. "
-  "Do NOT invent stats or dates. If tools return nothing and STRICT_FACTS=true, say you can't verify. "
-  "For historical questions (years, seasons, specific matches, tournaments), use tool_history_lookup or tool_rm_ucl_titles to get Wikipedia data. "
-  "For rules/tactics explanations, you may write briefly, but if a year, season, or specific match is referenced, use the history tool. "
+  "You are a Real Madrid superfan and football assistant. "
+  "ALWAYS think about the question FIRST before answering. "
+  "For any factual information, you must SELECT the best tool to fetch data before responding. "
+  "You are never allowed to make up data or dates. "
+  "Examples:\n"
+  "- If about past champions, winners, or historical records, use tool_history_lookup.\n"
+  "- If about next fixtures or upcoming matches, use tool_af_next_fixture.\n"
+  "- If about live games, recent form, or current stats, use SofaScore tools.\n"
+  "- If about news or headlines, use tool_news_top.\n"
+  "- If about Real Madrid UCL history specifically, use tool_rm_ucl_titles.\n"
+  "If multiple tools might be useful, call them all, then combine the results naturally. "
+  "Think step by step: understand the question, select appropriate tools, fetch data, then compose your fanboy response. "
   "Prefer Real Madrid & LaLiga. Be concise (1–3 short paragraphs). Keep banter clean."
 )
 
@@ -186,8 +204,8 @@ def _pre_hint(text: str):
         return "Use tool_player_stats or tool_compare_players; call tools before answering."
     if any(w in t for w in ["news", "headline", "rumor", "transfer"]):
         return "Use tool_news; call tools before answering."
-    if re.search(r"\b(19[0-9]{2}|20[0-2][0-9])\b", t) or "history" in t or "season" in t:
-        return "Use tool_history_lookup first for historical details."
+    if _looks_historical(t):
+        return "Use tool_history_lookup or tool_rm_ucl_titles for historical details."
     if "fixture" in t or "next match" in t or "who do" in t and "play" in t:
         return "Use tool_next_fixture or tool_next_fixtures_multi; call tools before answering."
     if "last match" in t or "result" in t or "score" in t:
@@ -241,11 +259,18 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
         )
 
         needs_facts = _looks_factual(text)
+        needs_history = _looks_historical(text)
         msg = r.choices[0].message
 
+        # Force tool selection for factual queries
         if needs_facts and not getattr(msg, "tool_calls", None):
-            # Force tool selection: ask again with a stronger instruction
-            msgs.insert(1, {"role":"system","content":"This is a factual/dated football query. You MUST call at least one tool before answering."})
+            # Determine specific tool needed
+            if needs_history:
+                tool_hint = "This is a historical query. You MUST use tool_history_lookup or tool_rm_ucl_titles to get Wikipedia data before answering."
+            else:
+                tool_hint = "This is a factual query. You MUST call at least one appropriate tool before answering."
+            
+            msgs.insert(1, {"role":"system","content": tool_hint})
             r = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=msgs,
@@ -257,8 +282,12 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             )
             msg = r.choices[0].message
 
+        # Final fallback for strict mode
         if needs_facts and not getattr(msg, "tool_calls", None) and STRICT_FACTS:
-            return "I can't verify that without live data. Ask me again with a specific team/match or try commands like /matches, /live, /lastmatch."
+            if needs_history:
+                return "I need to look up historical data for that. Try asking about specific years, tournaments, or use commands like /matches, /live, /lastmatch for current info."
+            else:
+                return "I can't verify that without live data. Ask me again with a specific team/match or try commands like /matches, /live, /lastmatch."
         if msg.tool_calls:
             # Support multiple tool calls (e.g., compare both + h2h)
             tool_msgs = []
