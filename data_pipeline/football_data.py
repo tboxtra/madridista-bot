@@ -40,3 +40,4 @@ class FootballData:
             if (first_dt - now_utc()).days <= 30:
                 return future[0]
         return None
+

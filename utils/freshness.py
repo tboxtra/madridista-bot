@@ -6,3 +6,4 @@ def is_fresh(pulled_at_utc, max_age_s=120) -> bool:
 
 def source_stamp(provider_name: str) -> str:
     return f"{provider_name} • {to_local(now_utc()).strftime('%H:%M:%S')}"
+

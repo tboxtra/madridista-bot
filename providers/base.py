@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 class LiveProvider:
     """
@@ -16,7 +16,7 @@ class LiveProvider:
         """
         raise NotImplementedError
 
-    def get_event_incidents(self, event_id) -> List[Dict[str, Any]]:
+    def get_event_incidents(self, event_id: str | int) -> List[Dict[str, Any]]:
         """
         Return a list of incidents in chronological order.
         Each incident should contain:

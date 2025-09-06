@@ -1,42 +1,41 @@
-import os
 from datetime import datetime, timezone, timedelta
-
-# Handle zoneinfo import for Python 3.8 compatibility
-try:
-    import zoneinfo
-    Z = zoneinfo.ZoneInfo(os.getenv("TZ", "Africa/Lagos"))
-except ImportError:
-    # Fallback for Python 3.8
-    import pytz
-    Z = pytz.timezone(os.getenv("TZ", "Africa/Lagos"))
+from typing import List, Dict, Any
 
 def now_utc() -> datetime:
+    """Get current UTC datetime"""
     return datetime.now(timezone.utc)
 
-def parse_iso_utc(iso: str) -> datetime:
-    return datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+def parse_iso_utc(iso_string: str) -> datetime:
+    """Parse ISO 8601 UTC datetime string"""
+    if iso_string.endswith('Z'):
+        iso_string = iso_string[:-1] + '+00:00'
+    return datetime.fromisoformat(iso_string)
 
-def to_local(dt_utc: datetime) -> datetime:
-    return dt_utc.astimezone(Z)
+def fmt_abs(iso_string: str) -> str:
+    """Format absolute datetime for display"""
+    try:
+        dt = parse_iso_utc(iso_string)
+        return dt.strftime("%a %d %b %H:%M")
+    except Exception:
+        return iso_string
 
-def fmt_abs(iso: str) -> str:
-    return to_local(parse_iso_utc(iso)).strftime("%a %d %b • %H:%M")
+def to_local(utc_dt: datetime) -> datetime:
+    """Convert UTC datetime to local timezone"""
+    # For now, return as-is. In production, you might want to use a specific timezone
+    return utc_dt
 
-def window_filter(matches, days=2, max_days_cap=7):
-    """Keep only SCHEDULED/TIMED in [now, now+days], never > max_days_cap."""
+def window_filter(matches: List[Dict[str, Any]], days: int = 2, max_days_cap: int = 7) -> List[Dict[str, Any]]:
+    """Filter matches within a time window"""
     now = now_utc()
-    soon = now + timedelta(days=days)
-    hard_cap = now + timedelta(days=max_days_cap)
-    out = []
-    for m in matches:
-        status = m.get("status", "")
-        if status not in {"SCHEDULED", "TIMED"}:
-            continue
+    cutoff = now + timedelta(days=min(days, max_days_cap))
+    
+    filtered = []
+    for match in matches:
         try:
-            dt = parse_iso_utc(m["utcDate"])
+            match_dt = parse_iso_utc(match.get("utcDate", ""))
+            if now <= match_dt <= cutoff:
+                filtered.append(match)
         except Exception:
             continue
-        if now <= dt <= soon and dt <= hard_cap:
-            out.append(m)
-    out.sort(key=lambda x: x["utcDate"])
-    return out
+    
+    return filtered

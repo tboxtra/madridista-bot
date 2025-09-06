@@ -40,3 +40,4 @@ def pick_media_for(text):
     else:
         pool = _memes
     return random.choice(pool) if pool else None
+

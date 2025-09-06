@@ -25,3 +25,4 @@ def get_context(chat_id: int, k: int = 8) -> List[Tuple[str, str]]:
         return []
     # return up to last k messages
     return list(buf)[-k:]
+
