@@ -1,7 +1,8 @@
 from typing import Dict, Any, List, Optional
 from providers.unified import fd_team_matches, fd_comp_table, fd_comp_scorers
-from providers.sofascore import SofaScoreProvider
-from nlp.resolve import resolve_team, resolve_comp
+from providers.sofascore import SofaScoreProvider, player_search, player_season_stats, team_h2h, team_recent_form
+from providers.news import news_soccer
+from nlp.resolve import resolve_team, resolve_comp, resolve_player_name
 from utils.timeutil import fmt_abs, now_utc, parse_iso_utc
 from utils.formatting import md_escape
 
@@ -109,3 +110,102 @@ def tool_last_man_of_match(args: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": True, "name": best.get("name"), "rating": best.get("rating")}
     except Exception:
         return {"ok": False, "message": "MoM data unavailable."}
+
+def tool_compare_teams(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Compare two teams' recent form (last k) and provide a quick verdict."""
+    a = args.get("team_a") or "Real Madrid"
+    b = args.get("team_b") or "Barcelona"
+    k = int(args.get("k", 5))
+    ta, tb = resolve_team(a), resolve_team(b)
+    form_a = team_recent_form(ta, limit=k)
+    form_b = team_recent_form(tb, limit=k)
+    
+    # derive simple points: win=3, draw=1, loss=0
+    def pts(hs, as_):
+        if hs > as_:
+            return 3
+        if hs == as_:
+            return 1
+        return 0
+    
+    def sum_pts(arr, team_is_home_pred):
+        s = 0
+        for m in arr:
+            if team_is_home_pred(m):
+                s += pts(m["home_score"], m["away_score"])
+            else:
+                s += pts(m["away_score"], m["home_score"])
+        return s
+    
+    # naive home/away—Sofa recent list includes both; infer with names
+    def is_home_a(m):
+        return (m["home"] or "").lower().startswith(a.lower().split()[0])
+    
+    def is_home_b(m):
+        return (m["home"] or "").lower().startswith(b.lower().split()[0])
+    
+    pa = sum_pts(form_a, is_home_a)
+    pb = sum_pts(form_b, is_home_b)
+    verdict = "edge " + (a if pa >= pb else b) if abs(pa - pb) >= 2 else "too close to call"
+    
+    return {"ok": True, "k": k, "team_a": a, "team_b": b,
+            "points_a": pa, "points_b": pb, "verdict": verdict,
+            "form_a": form_a, "form_b": form_b}
+
+def tool_h2h_summary(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Head-to-head summary between two teams."""
+    a = args.get("team_a") or "Real Madrid"
+    b = args.get("team_b") or "Barcelona"
+    ta, tb = resolve_team(a), resolve_team(b)
+    js = team_h2h(ta, tb)
+    matches = (js.get("events") or [])[:10]
+    wins_a = wins_b = draws = 0
+    
+    for e in matches:
+        hs = (e.get("homeScore") or {}).get("current", 0)
+        as_ = (e.get("awayScore") or {}).get("current", 0)
+        if hs == as_:
+            draws += 1
+        elif hs > as_ and e.get("homeTeam", {}).get("id") == ta:
+            wins_a += 1
+        elif hs < as_ and e.get("awayTeam", {}).get("id") == ta:
+            wins_a += 1
+        else:
+            wins_b += 1
+    
+    return {"ok": True, "team_a": a, "team_b": b,
+            "wins_a": wins_a, "wins_b": wins_b, "draws": draws, "sample": len(matches)}
+
+def tool_player_stats(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Basic player season stats via SofaScore (goals/assists/apps if available)."""
+    name = args.get("player_name") or resolve_player_name(args.get("query", "") or "")
+    if not name:
+        return {"ok": False, "message": "Player not recognized."}
+    
+    p = player_search(name)
+    if not p:
+        return {"ok": False, "message": f"No player found for {name}."}
+    
+    pid = p.get("id")
+    season = player_season_stats(pid)
+    
+    # The structure varies by endpoint; extract common fields where present
+    out = {"name": p.get("name") or name}
+    s = season if isinstance(season, dict) else {}
+    agg = s.get("statistics") or s.get("summary") or {}
+    out["team"] = (p.get("team") or {}).get("name")
+    out["apps"] = agg.get("appearances") or agg.get("matchesPlayed")
+    out["goals"] = agg.get("goals")
+    out["assists"] = agg.get("assists")
+    out["rating"] = agg.get("rating")
+    
+    return {"ok": True, **out}
+
+def tool_news(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Get top football news; optional filter by keyword/team."""
+    q = (args.get("query") or "").lower().strip()
+    arts = news_soccer(limit=15)
+    if q:
+        arts = [a for a in arts if q in ((a.get("title", "") + " " + a.get("body", "")).lower())]
+    rows = [{"title": a.get("title"), "source": a.get("source"), "url": a.get("url")} for a in arts[:5]]
+    return {"ok": True, "items": rows}

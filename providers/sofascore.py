@@ -151,3 +151,55 @@ class SofaScoreProvider:
             return None
         except Exception:
             return None
+
+def player_search(name: str) -> dict | None:
+    """Search for a player by name"""
+    try:
+        # Sofascore search endpoint pattern
+        q = name.replace(" ", "%20")
+        data = _get(f"/search/all?q={q}")
+        players = (data.get("players") or {}).get("data", [])
+        return players[0] if players else None
+    except Exception:
+        return None
+
+def player_overview(player_id: int) -> dict:
+    """Get player overview"""
+    try:
+        return _get(f"/player/{player_id}")
+    except Exception:
+        return {}
+
+def player_season_stats(player_id: int, season_id: int | None = None) -> dict:
+    """Get player season stats"""
+    try:
+        # Season id optional; many endpoints return current season aggregates
+        return _get(f"/player/{player_id}/season")
+    except Exception:
+        return {}
+
+def team_h2h(team_a_id: int, team_b_id: int) -> dict:
+    """Get head-to-head between two teams"""
+    try:
+        # A common H2H endpoint; adjust if your base differs
+        return _get(f"/team/{team_a_id}/h2h/{team_b_id}")
+    except Exception:
+        return {}
+
+def team_recent_form(team_id: int, limit: int = 5) -> list[dict]:
+    """Get team's recent form"""
+    try:
+        js = _get(f"/team/{team_id}/events/last/0")
+        evs = (js.get("events") or [])[:limit]
+        out = []
+        for e in evs:
+            out.append({
+                "home": e.get("homeTeam",{}).get("name"),
+                "away": e.get("awayTeam",{}).get("name"),
+                "home_score": (e.get("homeScore") or {}).get("current", 0),
+                "away_score": (e.get("awayScore") or {}).get("current", 0),
+                "ts": e.get("startTimestamp")
+            })
+        return out
+    except Exception:
+        return []

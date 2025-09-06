@@ -27,6 +27,14 @@ FUNCTIONS = [
   {"name":"tool_injuries","description":"Team injuries/unavailable","parameters":{"type":"object","properties":{"team_name":{"type":"string"},"team_id":{"type":"integer"}}}},
   {"name":"tool_squad","description":"Team squad (optional position filter)","parameters":{"type":"object","properties":{"team_name":{"type":"string"},"team_id":{"type":"integer"},"position":{"type":"string"}}}},
   {"name":"tool_last_man_of_match","description":"Last Man of the Match or top-rated player","parameters":{"type":"object","properties":{"team_name":{"type":"string"},"team_id":{"type":"integer"}}}},
+  {"name":"tool_compare_teams","description":"Compare two teams' recent form (last k) with quick verdict",
+   "parameters":{"type":"object","properties":{"team_a":{"type":"string"},"team_b":{"type":"string"},"k":{"type":"integer"}}}},
+  {"name":"tool_h2h_summary","description":"Head-to-head summary between two teams",
+   "parameters":{"type":"object","properties":{"team_a":{"type":"string"},"team_b":{"type":"string"}}}},
+  {"name":"tool_player_stats","description":"Basic player season stats (apps/goals/assists/rating)",
+   "parameters":{"type":"object","properties":{"player_name":{"type":"string"},"query":{"type":"string"}}}},
+  {"name":"tool_news","description":"Top football news (optional filter)",
+   "parameters":{"type":"object","properties":{"query":{"type":"string"}}}},
 ]
 
 NAME_TO_FUNC = {
@@ -39,18 +47,35 @@ NAME_TO_FUNC = {
   "tool_injuries": T.tool_injuries,
   "tool_squad": T.tool_squad,
   "tool_last_man_of_match": T.tool_last_man_of_match,
+  "tool_compare_teams": T.tool_compare_teams,
+  "tool_h2h_summary": T.tool_h2h_summary,
+  "tool_player_stats": T.tool_player_stats,
+  "tool_news": T.tool_news,
 }
+
+# Optional: very light pre-router to hint the model
+def _pre_hint(text: str) -> str | None:
+    t = text.lower()
+    if "compare" in t or "vs" in t or "versus" in t:
+        return "You may need tool_compare_teams or tool_h2h_summary."
+    if "stats" in t or "how many goals" in t or "assists" in t:
+        return "You may need tool_player_stats."
+    if "news" in t or "headline" in t or "rumor" in t:
+        return "You may need tool_news."
+    return None
 
 def answer_nl_question(text: str) -> str:
     """Natural language in; football answer out (tools + LLM composition)."""
     try:
-        # First LLM call (decide if a tool is needed)
+        hint = _pre_hint(text)
+        msgs = [{"role":"system","content": SYSTEM}]
+        if hint:
+            msgs.append({"role":"system","content": hint})
+        msgs.append({"role":"user","content": text})
+
         r = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-              {"role":"system","content": SYSTEM},
-              {"role":"user","content": text}
-            ],
+            messages=msgs,
             tools=[{"type":"function","function": f} for f in FUNCTIONS],
             tool_choice="auto",
             temperature=0.3,
@@ -58,30 +83,24 @@ def answer_nl_question(text: str) -> str:
         )
 
         msg = r.choices[0].message
-        # If the model chose a tool, execute it and call the model again with tool result
         if msg.tool_calls:
-            tool_msg = msg.tool_calls[0]
-            name = tool_msg.function.name
-            args = json.loads(tool_msg.function.arguments or "{}")
-            fn = NAME_TO_FUNC.get(name)
-            if not fn:
-                return "I couldn't find the right data source for that."
-            result = fn(args)
+            # Support multiple tool calls (e.g., compare both + h2h)
+            tool_msgs = []
+            for tc in msg.tool_calls:
+                name = tc.function.name
+                args = json.loads(tc.function.arguments or "{}")
+                fn = NAME_TO_FUNC.get(name)
+                result = fn(args) if fn else {"ok": False, "message": "Unknown tool"}
+                tool_msgs.append({"role":"tool","tool_call_id": tc.id, "name": name, "content": json.dumps(result)})
 
             r2 = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[
-                  {"role":"system","content": SYSTEM},
-                  {"role":"user","content": text},
-                  msg,
-                  {"role":"tool","tool_call_id": tool_msg.id, "name": name, "content": json.dumps(result)}
-                ],
+                messages=[{"role":"system","content": SYSTEM},{"role":"user","content": text}, msg, *tool_msgs],
                 temperature=0.5,
-                max_tokens=260
+                max_tokens=320
             )
             return r2.choices[0].message.content.strip()
 
-        # No tool needed (concept/rules/chat in-scope)
         return (msg.content or "Can you rephrase that?").strip()
     
     except Exception as e:
