@@ -389,23 +389,38 @@ def tool_next_fixtures_multi(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "__source": CIT_FD, "items": out}
 
 def tool_predict_fixture(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Fan-style score prediction for next match using multiple signals."""
     team = args.get("team_name") or "Real Madrid"
-    tid = resolve_team(team)
-    nxt = tool_next_fixture({"team_id": tid})
-    if not nxt.get("ok"):
-        return {"ok": False, "__source": CIT_FD, "message": "No upcoming fixture to predict."}
-    home, away = nxt["home"], nxt["away"]
-    fa = tool_form({"team_name": home, "k": 5}).get("results", [])
-    fb = tool_form({"team_name": away, "k": 5}).get("results", [])
-    def pts(arr):
-        s=0
-        for m in arr:
-            h,a=m["home_score"], m["away_score"]
-            s += 3 if h>a else 1 if h==a else 0
-        return s
-    ph, pa = pts(fa), pts(fb)
-    facts = [f"Next: {home} vs {away}", f"Form points last 5 — {home}:{ph}, {away}:{pa}"]
-    # Use the AI banter engine to write the prediction
+    from orchestrator.tools_ext import tool_af_next_fixture, tool_sofa_form, tool_club_elo, tool_odds_snapshot
     from utils.banter_ai import ai_banter
-    prediction = ai_banter("prediction", f"Predict {home} vs {away}", facts)
-    return {"ok": True, "__source": CIT_FD, "prediction": prediction, "facts": facts}
+    from nlp.resolve import resolve_team
+    
+    tid = resolve_team(team)  # team_id for providers
+    nxt = tool_af_next_fixture({"team_id": tid})
+    if not nxt.get("ok"): 
+        return {"ok": False, "__source": "API-Football", "message":"No upcoming fixture."}
+    
+    home, away = nxt["home"], nxt["away"]
+
+    # form signals (team ids must be Sofa ids; if your resolver differs, map accordingly)
+    fa = tool_sofa_form({"team_id": resolve_team(home), "k": 5}).get("events",[])
+    fb = tool_sofa_form({"team_id": resolve_team(away), "k": 5}).get("events",[])
+    ph = len([e for e in fa if e.get("homeScore",0) > e.get("awayScore",0)])*3 + len([e for e in fa if e.get("homeScore",0)==e.get("awayScore",0)])
+    pa = len([e for e in fb if e.get("homeScore",0) > e.get("awayScore",0)])*3 + len([e for e in fb if e.get("homeScore",0)==e.get("awayScore",0)])
+
+    # Elo signals
+    eh = tool_club_elo({"team_name": home})
+    ea = tool_club_elo({"team_name": away})
+
+    # Odds snapshot (optional: pick correct sport_key per league)
+    odds = tool_odds_snapshot({"sport_key":"soccer_epl"}).get("markets",[])  # adjust per comp
+    # You can parse odds to implied prob; for brevity we just mention odds existence.
+
+    facts = [
+        f"Next: {home} vs {away} on {nxt['when']}",
+        f"Form points last 5 — {home}:{ph}, {away}:{pa}",
+        f"Elo — {home}:{(eh.get('Elo') if eh.get('ok') else 'n/a')}, {away}:{(ea.get('Elo') if ea.get('ok') else 'n/a')}",
+        "Prematch odds available"
+    ]
+    pred = ai_banter("prediction", f"Predict {home} vs {away}", facts)
+    return {"ok": True, "__source": "API-Football • SofaScore • ClubElo • OddsAPI", "prediction": pred, "facts": facts}

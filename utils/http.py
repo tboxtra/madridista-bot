@@ -1,21 +1,12 @@
+# utils/http.py
 import requests
-import time
-import random
 
-DEFAULT_TIMEOUT = 12
-S = requests.Session()
-S.headers.update({"User-Agent": "MadridistaBot/1.0 (+Telegram)"})
+def get(url, timeout=15, headers=None, params=None):
+    r = requests.get(url, headers=headers or {}, params=params or {}, timeout=timeout)
+    r.raise_for_status()
+    return r
 
-def get(url, *, params=None, headers=None, timeout=DEFAULT_TIMEOUT, retries=2, backoff=0.6):
-    """HTTP GET with retries and backoff"""
-    last = None
-    for i in range(retries+1):
-        try:
-            r = S.get(url, params=params, headers=headers, timeout=timeout)
-            r.raise_for_status()
-            return r
-        except Exception as e:
-            last = e
-            if i < retries:
-                time.sleep(backoff + random.random()*0.5)
-    raise last
+def post(url, json=None, timeout=15, headers=None):
+    r = requests.post(url, json=json or {}, headers=headers or {}, timeout=timeout)
+    r.raise_for_status()
+    return r

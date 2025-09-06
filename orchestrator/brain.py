@@ -2,6 +2,7 @@ import os, json, re
 from openai import OpenAI
 from orchestrator import tools as T
 from orchestrator import tools_history as TH
+from orchestrator import tools_ext as TX
 from utils.banter_ai import ai_banter
 
 STRICT_FACTS = os.getenv("STRICT_FACTS","true").lower() == "true"
@@ -122,7 +123,15 @@ FUNCTIONS = [
   {"name":"tool_rm_ucl_titles","description":"Real Madrid UEFA Champions League titles and history",
    "parameters":{"type":"object","properties":{}}},
   {"name":"tool_history_lookup","description":"Look up football history from Wikipedia",
-   "parameters":{"type":"object","properties":{"query":{"type":"string"}}}}
+   "parameters":{"type":"object","properties":{"query":{"type":"string"}}}},
+  {"name":"tool_af_next_fixture","description":"Next fixture via API-Football","parameters":{"type":"object","properties":{"team_id":{"type":"integer"}}}},
+  {"name":"tool_af_last_result","description":"Last finished via API-Football","parameters":{"type":"object","properties":{"team_id":{"type":"integer"}}}},
+  {"name":"tool_sofa_form","description":"Recent form via SofaScore","parameters":{"type":"object","properties":{"team_id":{"type":"integer"},"k":{"type":"integer"}}}},
+  {"name":"tool_news_top","description":"Top soccer news via LiveScore","parameters":{"type":"object","properties":{"query":{"type":"string"}}}},
+  {"name":"tool_highlights","description":"Highlights via Scorebat","parameters":{"type":"object","properties":{"team_name":{"type":"string"}}}},
+  {"name":"tool_youtube_latest","description":"Latest videos from club channel","parameters":{"type":"object","properties":{"channel_id":{"type":"string"}}}},
+  {"name":"tool_club_elo","description":"Club Elo rating","parameters":{"type":"object","properties":{"team_name":{"type":"string"}}}},
+  {"name":"tool_odds_snapshot","description":"Prematch odds snapshot","parameters":{"type":"object","properties":{"sport_key":{"type":"string"}}}}
 ]
 
 NAME_TO_FUNC = {
@@ -146,6 +155,14 @@ NAME_TO_FUNC = {
   "tool_predict_fixture": T.tool_predict_fixture,
   "tool_rm_ucl_titles": TH.tool_rm_ucl_titles,
   "tool_history_lookup": TH.tool_history_lookup,
+  "tool_af_next_fixture": TX.tool_af_next_fixture,
+  "tool_af_last_result": TX.tool_af_last_result,
+  "tool_sofa_form": TX.tool_sofa_form,
+  "tool_news_top": TX.tool_news_top,
+  "tool_highlights": TX.tool_highlights,
+  "tool_youtube_latest": TX.tool_youtube_latest,
+  "tool_club_elo": TX.tool_club_elo,
+  "tool_odds_snapshot": TX.tool_odds_snapshot,
 }
 
 # Optional: very light pre-router to hint the model
@@ -169,6 +186,14 @@ def _pre_hint(text: str):
         return "You may need tool_glossary if this is a rules/tactics/term question."
     if "fixture" in t and ((" and " in t) or "both" in t or "two teams" in t):
         return "You may need tool_next_fixtures_multi."
+    if "highlight" in t or "video" in t:
+        return "You may need tool_highlights or tool_youtube_latest."
+    if "elo" in t or "strength" in t:
+        return "You may need tool_club_elo."
+    if "odds" in t or "bookies" in t or "lines" in t:
+        return "You may need tool_odds_snapshot."
+    if "news" in t:
+        return "You may need tool_news_top."
     return None
 
 def answer_nl_question(text: str, context_summary: str = "") -> str:
