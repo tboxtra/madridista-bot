@@ -1,6 +1,7 @@
 import os, json
 from openai import OpenAI
 from orchestrator import tools as T
+from utils.banter_ai import ai_banter
 
 CITATIONS_ON = os.getenv("CITATIONS", "true").lower() == "true"
 SAFE_MAX = 900
@@ -10,14 +11,44 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 def _safe(s: str) -> str: 
     return (s or "")[:SAFE_MAX].strip()
 
+def _banter_intent(q: str) -> str:
+    ql = (q or "").lower()
+    if any(k in ql for k in ["predict","prediction","scoreline","call it","who wins","bet","odds"]):
+        return "prediction"
+    if any(k in ql for k in ["debate","argue","convince","who's better","who is better","clear of"]):
+        return "argument"
+    if any(k in ql for k in ["banter","trash talk","talk your talk","clap back","ratio"]):
+        return "banter"
+    if any(k in ql for k in ["barca","barcelona","xavi","camp nou"]) and len(ql) < 140:
+        return "banter"
+    return ""
+
+def _facts_from_toolpayload(payloads):
+    facts = []
+    for p in payloads:
+        if not isinstance(p, dict): continue
+        if p.get("when") and p.get("home") and p.get("away") and "home_score" in p:
+            facts.append(f"Last match: {p['home']} {p['home_score']}-{p['away_score']} {p['away']} on {p['when']}")
+        if p.get("points_a") is not None and p.get("points_b") is not None:
+            facts.append(f"Form points last {p.get('k',5)}: {p.get('team_a','A')}={p['points_a']}, {p.get('team_b','B')}={p['points_b']}")
+        if p.get("event") and p["event"].get("home") and p["event"].get("away"):
+            facts.append(f"Lineups for {p['event']['home']} vs {p['event']['away']} possibly available")
+        if p.get("rows") and len(p["rows"]) and "pts" in p["rows"][0]:
+            top = p["rows"][0]
+            facts.append(f"Table leader: {top['team']} on {top['pts']} pts")
+        if p.get("items") and len(p["items"]) and "title" in p["items"][0]:
+            facts.append("News feed active")
+    return facts
+
 def _in_scope(q: str) -> bool:
     ql = (q or "").lower()
     football_terms = (
         "football","soccer","match","fixture","goal","assist","lineup","line up","xi",
         "premier","laliga","ucl","champions","league","table","standings","scorers",
-        "injury","squad","h2h","compare","form","live","result","score",
-        "news","headline","rumor","transfer","tactic","tactics","formation",
-        "offside","var","history","legend","coach","manager","pressing","counter","xg",
+        "injury","injuries","squad","h2h","compare","form","live","result","score",
+        "news","headline","rumor","transfer","transfers",
+        "tactic","tactics","formation","offside","var","history","legend","coach","manager",
+        "pressing","counter","xg",
         "real madrid","madrid","barca","barcelona","bernabeu","vinicius","bellingham","ancelotti","mbapp"
     )
     return any(t in ql for t in football_terms)
@@ -59,7 +90,11 @@ FUNCTIONS = [
     "type":"object","properties":{"team_name":{"type":"string"},"team_id":{"type":"integer"}}}
   },
   {"name":"tool_glossary","description":"Explain football terms, rules, tactics from internal KB",
-   "parameters":{"type":"object","properties":{"term":{"type":"string"}}}}
+   "parameters":{"type":"object","properties":{"term":{"type":"string"}}}},
+  {"name":"tool_next_fixtures_multi","description":"Next fixtures for multiple teams",
+   "parameters":{"type":"object","properties":{"team_names":{"type":"array","items":{"type":"string"}}}}},
+  {"name":"tool_predict_fixture","description":"Fan-style score prediction for next match",
+   "parameters":{"type":"object","properties":{"team_name":{"type":"string"}}}}
 ]
 
 NAME_TO_FUNC = {
@@ -79,6 +114,8 @@ NAME_TO_FUNC = {
   "tool_compare_players": T.tool_compare_players,
   "tool_next_lineups": T.tool_next_lineups,
   "tool_glossary": T.tool_glossary,
+  "tool_next_fixtures_multi": T.tool_next_fixtures_multi,
+  "tool_predict_fixture": T.tool_predict_fixture,
 }
 
 # Optional: very light pre-router to hint the model
@@ -94,6 +131,8 @@ def _pre_hint(text: str):
         return "You may need tool_news."
     if any(w in t for w in ["what is", "explain", "meaning of", "define", "how does", "how do"]):
         return "You may need tool_glossary if this is a rules/tactics/term question."
+    if "fixture" in t and ((" and " in t) or "both" in t or "two teams" in t):
+        return "You may need tool_next_fixtures_multi."
     return None
 
 def answer_nl_question(text: str) -> str:
@@ -130,11 +169,13 @@ def answer_nl_question(text: str) -> str:
             # Support multiple tool calls (e.g., compare both + h2h)
             tool_msgs = []
             sources = set()
+            results_payloads = []
             for tc in msg.tool_calls:
                 name = tc.function.name
                 args = json.loads(tc.function.arguments or "{}")
                 fn = NAME_TO_FUNC.get(name)
                 result = fn(args) if fn else {"ok": False, "message": "Unknown tool"}
+                results_payloads.append(result)
                 src = result.get("__source")
                 if src:
                     sources.add(src)
@@ -147,6 +188,16 @@ def answer_nl_question(text: str) -> str:
                 max_tokens=380
             )
             out = r2.choices[0].message.content.strip()
+            
+            # Apply AI banter override when appropriate
+            banter_mode = _banter_intent(text)
+            if banter_mode:
+                try:
+                    facts_list = _facts_from_toolpayload(results_payloads)
+                    out = ai_banter(banter_mode, text, facts_list) or out
+                except Exception:
+                    pass
+            
             if CITATIONS_ON and sources:
                 out += "\n\n(" + " • ".join(sorted(sources)) + ")"
             return _safe(out)

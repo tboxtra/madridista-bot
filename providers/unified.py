@@ -19,7 +19,7 @@ def fd_team_matches(team_id: int, status: str = None, limit=20, window_days: int
     """
     today = _today_iso()
     date_from = (today - timedelta(days=window_days)).isoformat()
-    date_to = (today + timedelta(days=7)).isoformat()  # a week into the future for 'next'
+    date_to = (today + timedelta(days=30)).isoformat()  # a week into the future for 'next'
     params = {"dateFrom": date_from, "dateTo": date_to, "limit": 200}
     r = S.get(f"{FD_BASE}/teams/{team_id}/matches", params=params, timeout=20)
     r.raise_for_status()

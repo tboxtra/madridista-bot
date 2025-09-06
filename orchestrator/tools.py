@@ -136,8 +136,21 @@ def tool_compare_teams(args: Dict[str, Any]) -> Dict[str, Any]:
     fa = [m for m in team_recent_form(ta, limit=max(10, k)) if _is_recent_ts(m.get("ts"))][:k]
     fb = [m for m in team_recent_form(tb, limit=max(10, k)) if _is_recent_ts(m.get("ts"))][:k]
 
+    # Fallback to Football-Data if too thin
     if len(fa) < max(1, k//2) or len(fb) < max(1, k//2):
-        return {"ok": False, "message": "Not enough recent matches to compare (season gap?).", "__source": "SofaScore"}
+        def _fd_form(tid):
+            ms = fd_team_matches(tid, status="FINISHED", limit=max(10,k), window_days=180)
+            out = []
+            for m in ms[:k]:
+                ft = (m.get("score", {}) or {}).get("fullTime", {}) or {}
+                out.append({
+                    "home": m["homeTeam"]["name"], "away": m["awayTeam"]["name"],
+                    "home_score": ft.get("home",0), "away_score": ft.get("away",0),
+                    "ts": None
+                })
+            return out
+        if len(fa) < max(1, k//2): fa = _fd_form(ta)
+        if len(fb) < max(1, k//2): fb = _fd_form(tb)
 
     def pts(h, a):
         if h > a: return 3
@@ -348,3 +361,51 @@ def tool_glossary(args: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": False, "__source": "KB", "message": "Term not found"}
     except Exception:
         return {"ok": False, "__source": "KB", "message": "Glossary unavailable"}
+
+def tool_next_fixtures_multi(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Get the nearest upcoming fixtures for multiple teams.
+    Args: team_names: List[str]
+    """
+    names = args.get("team_names") or []
+    if not names or not isinstance(names, list):
+        return {"ok": False, "__source": CIT_FD, "message": "Provide team_names list."}
+    out = []
+    for name in names:
+        tid = resolve_team(name)
+        ms = fd_team_matches(tid, status=None, limit=30, window_days=90)
+        future = [m for m in ms if m.get("status") in {"SCHEDULED", "TIMED"}]
+        future.sort(key=lambda x: x.get("utcDate", ""))
+        if future:
+            m = future[0]
+            out.append({
+                "team": name,
+                "when": fmt_abs(m["utcDate"]),
+                "home": m["homeTeam"]["name"],
+                "away": m["awayTeam"]["name"]
+            })
+        else:
+            out.append({"team": name, "message": "No upcoming fixtures"})
+    return {"ok": True, "__source": CIT_FD, "items": out}
+
+def tool_predict_fixture(args: Dict[str, Any]) -> Dict[str, Any]:
+    team = args.get("team_name") or "Real Madrid"
+    tid = resolve_team(team)
+    nxt = tool_next_fixture({"team_id": tid})
+    if not nxt.get("ok"):
+        return {"ok": False, "__source": CIT_FD, "message": "No upcoming fixture to predict."}
+    home, away = nxt["home"], nxt["away"]
+    fa = tool_form({"team_name": home, "k": 5}).get("results", [])
+    fb = tool_form({"team_name": away, "k": 5}).get("results", [])
+    def pts(arr):
+        s=0
+        for m in arr:
+            h,a=m["home_score"], m["away_score"]
+            s += 3 if h>a else 1 if h==a else 0
+        return s
+    ph, pa = pts(fa), pts(fb)
+    facts = [f"Next: {home} vs {away}", f"Form points last 5 — {home}:{ph}, {away}:{pa}"]
+    # Use the AI banter engine to write the prediction
+    from utils.banter_ai import ai_banter
+    prediction = ai_banter("prediction", f"Predict {home} vs {away}", facts)
+    return {"ok": True, "__source": CIT_FD, "prediction": prediction, "facts": facts}

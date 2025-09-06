@@ -111,6 +111,15 @@ async def cmd_compareplayers(update, context):
     else:
         await update.message.reply_text(res.get("message", "Comparison unavailable."))
 
+async def cmd_predict(update, context):
+    team = " ".join(context.args) if context.args else "Real Madrid"
+    from orchestrator.tools import tool_predict_fixture
+    res = tool_predict_fixture({"team_name": team})
+    if res.get("ok"):
+        await update.message.reply_text(res.get("prediction", "No prediction available."))
+    else:
+        await update.message.reply_text(res.get("message", "No match to predict."))
+
 async def text_router(update, context):
     q = (update.message.text or "").strip()
     reply = answer_nl_question(q)
@@ -128,6 +137,7 @@ def main():
     app.add_handler(CommandHandler("lineups", cmd_lineups))
     app.add_handler(CommandHandler("compare", cmd_compare))
     app.add_handler(CommandHandler("compareplayers", cmd_compareplayers))
+    app.add_handler(CommandHandler("predict", cmd_predict))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), text_router), group=20)
     app.run_polling(drop_pending_updates=True)
 
