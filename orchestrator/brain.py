@@ -281,29 +281,7 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             max_tokens=220
         )
 
-        needs_facts = _looks_factual(text)
-        needs_history = _looks_historical(text)
         msg = r.choices[0].message
-
-        # Force tool selection for factual queries
-        if needs_facts and not getattr(msg, "tool_calls", None):
-            # Determine specific tool needed
-            if needs_history:
-                tool_hint = "This is a historical query. You MUST use tool_history_lookup or tool_ucl_last_n_winners to get Wikipedia data before answering."
-            else:
-                tool_hint = "This is a factual query. You MUST call at least one appropriate tool before answering."
-            
-            msgs.insert(1, {"role":"system","content": tool_hint})
-            r = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=msgs,
-                tools=[{"type":"function","function": f} for f in FUNCTIONS],
-                tool_choice="auto",
-                temperature=0.2,
-                max_tokens=220,
-                timeout=30
-            )
-            msg = r.choices[0].message
 
         # If model didn't call tools and it's a factual ask, we enforce a plan
         results_payloads = []
@@ -338,13 +316,25 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             )
             msg = r.choices[0].message
         
-        if needs_facts and not getattr(msg, "tool_calls", None) and STRICT_FACTS:
-            return "I can't verify that without external data."
-            
-        if not getattr(msg, "tool_calls", None) and needs_facts:
+        # If still no tools after retry, use arbiter cascade
+        if needs_facts and not getattr(msg, "tool_calls", None):
             # 1) Planned cascade: try likely tools in order until one yields non-empty, valid data
             for tool_name in plan_tools(text):
-                res = _run_call(tool_name, {})
+                # Extract team names for H2H tools
+                args = {}
+                if tool_name in ["tool_af_last_result_vs", "tool_h2h_officialish"]:
+                    # Simple team extraction for H2H queries
+                    import re
+                    teams = re.findall(r'\b(?:Real Madrid|Madrid|Arsenal|Barcelona|Barca|Manchester City|City|Liverpool|Chelsea|Tottenham|Bayern|PSG|Juventus|Milan|Inter|Napoli|Roma|Lazio|Dortmund|Leipzig|Ajax|Porto|Benfica|Celtic|Rangers|Sevilla|Valencia|Sociedad|Bilbao|Villarreal|Betis|Atletico|Atleti)\b', text, re.IGNORECASE)
+                    if len(teams) >= 2:
+                        args = {"team_a": teams[0], "team_b": teams[1]}
+                    elif "vs" in text.lower() or "versus" in text.lower():
+                        # Try to split on vs/versus
+                        parts = re.split(r'\s+vs\.?\s+|\s+versus\s+', text, flags=re.IGNORECASE)
+                        if len(parts) >= 2:
+                            args = {"team_a": parts[0].strip(), "team_b": parts[1].strip()}
+                
+                res = _run_call(tool_name, args)
                 ok = (res.get("ok") is True) and (not _empty(res))
                 valid, why = validate_recency(text, res)
                 if ok and valid:
