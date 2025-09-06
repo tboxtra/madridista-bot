@@ -155,6 +155,9 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             msgs.append({"role":"system","content": hint})
         if context_summary:
             msgs.append({"role":"system","content": f"Context: {context_summary}"})
+        if text.startswith("(Conversation summary context"):
+            # Let the LLM know the first lines are context, not a user ask to analyze literally
+            msgs.append({"role":"system","content":"The user message begins with a summary context for this chat. Use it to keep continuity and avoid repeating known info."})
         msgs.append({"role":"user","content": text})
 
         r = client.chat.completions.create(

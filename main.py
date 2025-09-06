@@ -7,14 +7,22 @@ from orchestrator.tools import (
     tool_next_fixture, tool_last_result, tool_live_now, tool_table, tool_form, tool_scorers,
     tool_next_lineups, tool_compare_teams, tool_compare_players
 )
-from utils.context import (
-    get_chat_context, add_to_context, should_respond_in_group, 
-    extract_context_summary, is_group_chat, is_private_chat
-)
+from utils.memory import mem_for, export_context
+from utils.relevance import classify_relevance
+from utils.cooldown import can_speak, mark_spoken
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TOKEN:
     raise RuntimeError("Missing TELEGRAM_BOT_TOKEN")
+
+async def _remember(update, role="user"):
+    chat = update.effective_chat
+    msg = update.effective_message
+    user = update.effective_user
+    mem = mem_for(chat.id)
+    mem.add(role=role, text=(msg.text or msg.caption or ""), user_id=(user.id if user else 0), username=(user.username or ""))
+    if mem.should_summarize():
+        mem.summarize_now()
 
 # ---- Command handlers (concise, API-grounded) ----
 async def cmd_start(update, context):
@@ -23,9 +31,12 @@ async def cmd_start(update, context):
 async def cmd_matches(update, context):
     res = tool_next_fixture({"team_name": " ".join(context.args) if context.args else "Real Madrid"})
     if res.get("ok"):
-        await update.message.reply_text(f"{res['when']} • {res['home']} vs {res['away']}")
+        sent_text = f"{res['when']} • {res['home']} vs {res['away']}"
+        await update.message.reply_text(sent_text)
     else:
-        await update.message.reply_text(res.get("message", "No upcoming fixtures."))
+        sent_text = res.get("message", "No upcoming fixtures.")
+        await update.message.reply_text(sent_text)
+    mem_for(update.effective_chat.id).add(role="assistant", text=sent_text, user_id=0, username="bot")
 
 async def cmd_lastmatch(update, context):
     res = tool_last_result({"team_name": " ".join(context.args) if context.args else "Real Madrid"})
@@ -121,67 +132,46 @@ async def cmd_predict(update, context):
     from orchestrator.tools import tool_predict_fixture
     res = tool_predict_fixture({"team_name": team})
     if res.get("ok"):
-        await update.message.reply_text(res.get("prediction", "No prediction available."))
+        sent_text = res.get("prediction", "No prediction available.")
+        await update.message.reply_text(sent_text)
     else:
-        await update.message.reply_text(res.get("message", "No match to predict."))
+        sent_text = res.get("message", "No match to predict.")
+        await update.message.reply_text(sent_text)
+    mem_for(update.effective_chat.id).add(role="assistant", text=sent_text, user_id=0, username="bot")
 
-async def text_router(update: Update, context):
-    """Enhanced text router with conversation context awareness."""
-    message = update.message
-    if not message or not message.text:
-        return
-    
-    chat_id = message.chat_id
-    chat_type = message.chat.type
-    user_id = message.from_user.id if message.from_user else None
-    username = message.from_user.username if message.from_user else None
-    text = message.text.strip()
-    
-    # Check if bot is mentioned (for group chats)
-    bot_mentioned = False
-    if is_group_chat(chat_type):
-        bot_username = context.bot.username
-        if bot_username and f"@{bot_username}" in text:
-            bot_mentioned = True
-            # Remove mention from text for processing
-            text = text.replace(f"@{bot_username}", "").strip()
-    
-    # Add message to context
-    add_to_context(chat_id, {
-        "user_id": user_id,
-        "username": username,
-        "text": text,
-        "is_bot": False
-    })
-    
-    # Determine if bot should respond
-    should_respond = False
-    if is_private_chat(chat_type):
-        # Always respond in private chats
-        should_respond = True
-    elif is_group_chat(chat_type):
-        # Use context-aware logic for group chats
-        should_respond = should_respond_in_group(chat_id, text, bot_mentioned)
-    
-    if not should_respond:
-        return
-    
-    # Get conversation context
-    context_summary = extract_context_summary(chat_id)
-    
-    # Generate response
-    reply = answer_nl_question(text, context_summary)
-    
-    # Send response
-    sent_message = await message.reply_text(reply, disable_web_page_preview=False)
-    
-    # Add bot's response to context
-    add_to_context(chat_id, {
-        "user_id": context.bot.id,
-        "username": context.bot.username,
-        "text": reply,
-        "is_bot": True
-    })
+async def text_router(update, context):
+    await _remember(update, role="user")
+    chat = update.effective_chat
+    msg = update.effective_message
+
+    is_group = chat.type in ("group","supergroup")
+    should, conf, reason = classify_relevance(msg.text or "", is_group=is_group)
+    if not should:
+        return  # ignore quietly
+
+    # Cooldown check for unsolicited replies
+    if is_group and reason not in ("mentioned","dm_default"):
+        if not can_speak(chat.id):
+            return
+
+    # Build a richer prompt by injecting context summary (conversation awareness)
+    from orchestrator.brain import answer_nl_question, SYSTEM
+    ctx = export_context(chat.id)
+    context_prefix = ""
+    if ctx.get("summary"):
+        context_prefix = f"(Conversation summary context, keep consistent with this recent thread; don't repeat):\n{ctx['summary']}\n\n"
+
+    user_q = (msg.text or "").strip()
+    reply = answer_nl_question(context_prefix + user_q)
+
+    # Quote reply in groups to provide threading
+    try:
+        await update.message.reply_text(reply, disable_web_page_preview=False, reply_to_message_id=msg.message_id if is_group else None)
+    finally:
+        # store bot response too (helps future summarization)
+        mem_for(chat.id).add(role="assistant", text=reply, user_id=0, username="bot")
+        if is_group and reason not in ("mentioned","dm_default"):
+            mark_spoken(chat.id)
 
 def main():
     app = Application.builder().token(TOKEN).build()
