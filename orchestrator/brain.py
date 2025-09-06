@@ -3,6 +3,7 @@ from openai import OpenAI
 from orchestrator import tools as T
 from orchestrator import tools_history as TH
 from orchestrator import tools_ext as TX
+from orchestrator.arbiter import plan_tools, _is_empty as _empty, validate_recency
 from utils.banter_ai import ai_banter
 
 STRICT_FACTS = os.getenv("STRICT_FACTS","true").lower() == "true"
@@ -204,6 +205,10 @@ def _pre_hint(text: str):
     t = (text or "").lower()
     if any(x in t for x in ["last 5 ucl", "last five ucl", "ucl winners", "recent champions league winners", "last 5 champions league winners"]):
         return "Use tool_ucl_last_n_winners first, then summarize."
+    if any(w in t for w in ["who won", "winners", "champions", "finals", "season", "history"]):
+        return "Use tool_history_lookup first."
+    if "news" in t or "rumor" in t:
+        return "Use tool_news_top."
     if any(w in t for w in ["compare", "vs", "versus", "h2h","head to head"]):
         return "Use tool_compare_teams or tool_compare_players for comparisons; call tools before answering."
     if any(w in t for w in ["lineup", "line-ups", "line up", "xi", "starting eleven"]):
@@ -292,34 +297,63 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             )
             msg = r.choices[0].message
 
-        # Final fallback for strict mode
-        if needs_facts and not getattr(msg, "tool_calls", None) and STRICT_FACTS:
-            return "I can't verify that without external data. Try again with a bit more detail."
-        if msg.tool_calls:
-            # Support multiple tool calls (e.g., compare both + h2h)
-            tool_msgs = []
-            sources = set()
-            results_payloads = []
+        # If model didn't call tools and it's a factual ask, we enforce a plan
+        results_payloads = []
+        sources = set()
+
+        def _run_call(name, args):
+            if LOG_TOOL_CALLS: 
+                print(f"[arbiter] trying {name} with {args}")
+            fn = NAME_TO_FUNC.get(name)
+            res = fn(args or {}) if fn else {"ok": False, "message": "Unknown tool"}
+            src = res.get("__source")
+            if src: 
+                sources.add(src)
+            results_payloads.append(res)
+            return res
+
+        needs_facts = _looks_factual(text)
+        if not getattr(msg, "tool_calls", None) and needs_facts:
+            # 1) Planned cascade: try likely tools in order until one yields non-empty, valid data
+            for tool_name in plan_tools(text):
+                res = _run_call(tool_name, {})
+                ok = (res.get("ok") is True) and (not _empty(res))
+                valid, why = validate_recency(text, res)
+                if ok and valid:
+                    # Give this result back to the model to compose the final answer
+                    tool_msgs = [{"role":"tool","tool_call_id":"arbiter", "name":tool_name, "content": json.dumps(res)}]
+                    r2 = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role":"system","content": SYSTEM},{"role":"user","content": text}] + tool_msgs,
+                        temperature=0.5, max_tokens=380
+                    )
+                    out = (r2.choices[0].message.content or "").strip()
+                    if CITATIONS_ON and sources:
+                        out += "\n\n(" + " • ".join(sorted(sources)) + ")"
+                    return _safe(out)
+            # 2) If still nothing & STRICT => don't guess
+            if STRICT_FACTS:
+                return "I can't verify that without external data. Try specifying team or timeframe."
+            # 3) Non-strict fallback: return first tool's message
+            first = results_payloads[0] if results_payloads else {}
+            return (first.get("message") or "Couldn't fetch that yet.").strip()
+
+        # Normal path: model DID call tools → execute them all as before
+        tool_msgs = []
+        if getattr(msg, "tool_calls", None):
             for tc in msg.tool_calls:
                 name = tc.function.name
                 args = json.loads(tc.function.arguments or "{}")
-                if LOG_TOOL_CALLS:
-                    print(f"[tools] calling {name} with {args}")
-                fn = NAME_TO_FUNC.get(name)
-                result = fn(args) if fn else {"ok": False, "message": "Unknown tool"}
-                results_payloads.append(result)
-                src = result.get("__source")
-                if src:
-                    sources.add(src)
-                tool_msgs.append({"role":"tool","tool_call_id": tc.id, "name": name, "content": json.dumps(result)})
+                res = _run_call(name, args)
+                tool_msgs.append({"role":"tool","tool_call_id": tc.id, "name": name, "content": json.dumps(res)})
 
+            # Second pass for composition
             r2 = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role":"system","content": SYSTEM},{"role":"user","content": text}, msg, *tool_msgs],
-                temperature=0.5,
-                max_tokens=380
+                messages=[{"role":"system","content": SYSTEM},{"role":"user","content": text}, msg] + tool_msgs,
+                temperature=0.5, max_tokens=380
             )
-            out = r2.choices[0].message.content.strip()
+            out = (r2.choices[0].message.content or "").strip()
             
             # Apply AI banter override when appropriate
             banter_mode = _banter_intent(text)
