@@ -39,7 +39,9 @@ def _looks_historical(q: str) -> bool:
 CITATIONS_ON = os.getenv("CITATIONS", "true").lower() == "true"
 SAFE_MAX = 900
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+def _get_client():
+    """Lazy initialization of OpenAI client"""
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def _safe(s: str) -> str: 
     return (s or "")[:SAFE_MAX].strip()
@@ -272,7 +274,7 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             msgs.append({"role":"system","content":"The user message begins with a summary context for this chat. Use it to keep continuity and avoid repeating known info."})
         msgs.append({"role":"user","content": text})
 
-        r = client.chat.completions.create(
+        r = _get_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=msgs,
             tools=[{"type":"function","function": f} for f in FUNCTIONS],
@@ -306,7 +308,7 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                 print(f"[brain] Forcing tool retry for factual query: {text[:100]}")
             msgs.insert(1, {"role":"system","content":
                 "This is a factual football query. You MUST call at least one tool (fixtures/results/H2H/history) before answering."})
-            r = client.chat.completions.create(
+            r = _get_client().chat.completions.create(
                 model="gpt-4o-mini",
                 messages=msgs,
                 tools=[{"type":"function","function": f} for f in FUNCTIONS],
@@ -340,7 +342,7 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                 if ok and valid:
                     # Give this result back to the model to compose the final answer
                     tool_msgs = [{"role":"tool","tool_call_id":"arbiter", "name":tool_name, "content": json.dumps(res)}]
-                    r2 = client.chat.completions.create(
+                    r2 = _get_client().chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[{"role":"system","content": SYSTEM},{"role":"user","content": text}] + tool_msgs,
                         temperature=0.5, max_tokens=380
@@ -366,7 +368,7 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                 tool_msgs.append({"role":"tool","tool_call_id": tc.id, "name": name, "content": json.dumps(res)})
 
             # Second pass for composition
-            r2 = client.chat.completions.create(
+            r2 = _get_client().chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role":"system","content": SYSTEM},{"role":"user","content": text}, msg] + tool_msgs,
                 temperature=0.5, max_tokens=380

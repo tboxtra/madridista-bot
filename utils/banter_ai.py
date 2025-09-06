@@ -6,7 +6,9 @@ MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 FAN_SPICE = os.getenv("FAN_SPICE", "medium").lower()  # mild | medium | hot
 FAN_CREATIVE = os.getenv("FAN_CREATIVE", "true").lower() == "true"
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+def _get_client():
+    """Lazy initialization of OpenAI client"""
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 SYSTEM = (
   "You are a Real Madrid superfan on football social media. "
@@ -43,7 +45,7 @@ def ai_banter(mode: str, user_query: str, tools_facts: List[str]) -> str:
         "If unsure, present as opinion."
     )
     msgs = [{"role":"system","content": SYSTEM}] + FEWSHOT + [{"role":"user","content": user_prompt}]
-    r = client.chat.completions.create(
+    r = _get_client().chat.completions.create(
         model=MODEL,
         messages=msgs,
         temperature=0.9,
