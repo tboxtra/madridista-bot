@@ -39,7 +39,7 @@ def _looks_players(q: str) -> bool:
 
 def _looks_compare(q: str) -> bool:
     ql = (q or "").lower()
-    return any(w in ql for w in ["compare","vs","versus","h2h","head to head"])
+    return any(w in ql for w in ["compare","vs","versus","h2h","head to head","last score between","last result between"])
 
 def plan_tools(user_q: str) -> List[str]:
     """
@@ -52,7 +52,7 @@ def plan_tools(user_q: str) -> List[str]:
     if _looks_last(user_q):           plan += ["tool_af_last_result", "tool_last_result"]
     if _looks_news(user_q):           plan += ["tool_news_top"]
     if _looks_players(user_q):        plan += ["tool_player_stats", "tool_compare_players"]
-    if _looks_compare(user_q):        plan += ["tool_h2h_summary", "tool_compare_teams"]
+    if _looks_compare(user_q):        plan += ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_h2h_summary", "tool_compare_teams"]
     if _looks_history(user_q):        plan += ["tool_history_lookup"]
     # Always add general fallbacks at the end:
     plan += ["tool_sofa_form", "tool_table", "tool_history_lookup"]

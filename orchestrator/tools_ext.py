@@ -1,6 +1,7 @@
 # orchestrator/tools_ext.py
 from typing import Dict, Any
 from providers import api_football as AF, sofa as SOFA, livescore_news as LSN, scorebat as SB, youtube as YT, elo as ELO, odds as ODDS
+from providers.ids import af_id
 
 CIT_AF = "API-Football"
 CIT_SOFA = "SofaScore"
@@ -60,3 +61,50 @@ def tool_odds_snapshot(args: Dict[str, Any]) -> Dict[str, Any]:
     sport = args.get("sport_key","soccer_epl")  # change per league
     js = ODDS.prematch_odds(sport_key=sport)
     return {"ok": True, "__source": CIT_ODDS, "markets": js[:5]}
+
+def tool_af_last_result_vs(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Get the most recent competitive result between two teams using API-Football fixtures.
+    Args: team_a_id (int), team_b_id (int), team_a (str), team_b (str), days_back (int=1825)
+    """
+    # Support both ID and name inputs
+    a = int(args.get("team_a_id") or 0) or af_id(args.get("team_a") or "")
+    b = int(args.get("team_b_id") or 0) or af_id(args.get("team_b") or "")
+    days_back = int(args.get("days_back", 1825))  # 5 years default
+    
+    if not a or not b:
+        return {"ok": False, "__source": CIT_AF, "message": "team_a_id/team_a and team_b_id/team_b required."}
+
+    # Pull last N fixtures for both teams and filter intersections
+    fa = AF.fixtures_last(a, max_items=50)
+    fb = AF.fixtures_last(b, max_items=50)
+    
+    # Index by fixture id for speed
+    ids_b = {x.get("fixture",{}).get("id") for x in fb}
+    inter = [x for x in fa if x.get("fixture",{}).get("id") in ids_b]
+
+    # Fallback: filter by opponent id if no intersection found
+    if not inter:
+        inter = [x for x in fa if (x.get("teams",{}).get("home",{}).get("id")==b or
+                                   x.get("teams",{}).get("away",{}).get("id")==b)]
+
+    # Keep finished games only, newest first
+    inter = [x for x in inter if (x.get("fixture",{}).get("status",{}).get("short") in {"FT","AET","PEN"})]
+    inter.sort(key=lambda x: x.get("fixture",{}).get("date",""), reverse=True)
+
+    if not inter:
+        return {"ok": False, "__source": CIT_AF, "message": "No recent competitive meetings found."}
+
+    last = inter[0]
+    fx   = last.get("fixture",{})
+    teams= last.get("teams",{})
+    goals= last.get("goals",{})
+    return {
+        "ok": True, "__source": CIT_AF,
+        "when": fx.get("date"),
+        "home": teams.get("home",{}).get("name"),
+        "away": teams.get("away",{}).get("name"),
+        "home_score": goals.get("home"),
+        "away_score": goals.get("away"),
+        "fixture_id": fx.get("id")
+    }

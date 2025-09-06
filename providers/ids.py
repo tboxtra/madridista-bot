@@ -1,0 +1,56 @@
+# providers/ids.py
+# Minimal examples; expand as needed
+API_FOOTBALL_IDS = {
+    "real madrid": 541,    # API-Football team id
+    "arsenal": 42,
+    "barcelona": 529,
+    "atletico madrid": 530,
+    "manchester city": 50,
+    "manchester united": 33,
+    "liverpool": 40,
+    "chelsea": 49,
+    "tottenham": 47,
+    "bayern munich": 157,
+    "psg": 85,
+    "juventus": 496,
+    "ac milan": 489,
+    "inter milan": 505,
+    "napoli": 492,
+    "roma": 497,
+    "lazio": 487,
+    "borussia dortmund": 165,
+    "leipzig": 721,
+    "ajax": 194,
+    "porto": 503,
+    "benfica": 498,
+    "sporting": 498,
+    "celtic": 247,
+    "rangers": 257,
+    "sevilla": 559,
+    "valencia": 532,
+    "real sociedad": 548,
+    "athletic bilbao": 531,
+    "villarreal": 533,
+    "betis": 543,
+    "atletico": 530,
+    "atleti": 530,
+    "madrid": 541,
+    "barca": 529,
+    "city": 50,
+    "united": 33,
+    "spurs": 47,
+    "bayern": 157,
+    "juve": 496,
+    "milan": 489,
+    "inter": 505,
+    "dortmund": 165,
+    "sevilla": 559,
+    "valencia": 532,
+    "sociedad": 548,
+    "bilbao": 531,
+    "villarreal": 533
+}
+
+def af_id(name: str) -> int:
+    """Get API-Football team ID from team name."""
+    return API_FOOTBALL_IDS.get((name or "").lower().strip(), 0)

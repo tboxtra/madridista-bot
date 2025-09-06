@@ -158,6 +158,10 @@ FUNCTIONS = [
    "parameters":{"type":"object","properties":{"query":{"type":"string"}}}},
   {"name":"tool_ucl_last_n_winners","description":"Last N UCL winners from Wikipedia finals list",
    "parameters":{"type":"object","properties":{"n":{"type":"integer"}}}},
+  {"name":"tool_af_last_result_vs","description":"Most recent competitive result between two teams (API-Football)",
+   "parameters":{"type":"object","properties":{"team_a_id":{"type":"integer"},"team_b_id":{"type":"integer"},"team_a":{"type":"string"},"team_b":{"type":"string"},"days_back":{"type":"integer"}}}},
+  {"name":"tool_h2h_officialish","description":"H2H summary via Wikipedia if official pages exist",
+   "parameters":{"type":"object","properties":{"team_a":{"type":"string"},"team_b":{"type":"string"}}}},
   {"name":"tool_af_next_fixture","description":"Next fixture via API-Football","parameters":{"type":"object","properties":{"team_id":{"type":"integer"}}}},
   {"name":"tool_af_last_result","description":"Last finished via API-Football","parameters":{"type":"object","properties":{"team_id":{"type":"integer"}}}},
   {"name":"tool_sofa_form","description":"Recent form via SofaScore","parameters":{"type":"object","properties":{"team_id":{"type":"integer"},"k":{"type":"integer"}}}},
@@ -190,8 +194,10 @@ NAME_TO_FUNC = {
   "tool_rm_ucl_titles": TH.tool_rm_ucl_titles,
   "tool_history_lookup": TH.tool_history_lookup,
   "tool_ucl_last_n_winners": TH.tool_ucl_last_n_winners,
+  "tool_h2h_officialish": TH.tool_h2h_officialish,
   "tool_af_next_fixture": TX.tool_af_next_fixture,
   "tool_af_last_result": TX.tool_af_last_result,
+  "tool_af_last_result_vs": TX.tool_af_last_result_vs,
   "tool_sofa_form": TX.tool_sofa_form,
   "tool_news_top": TX.tool_news_top,
   "tool_highlights": TX.tool_highlights,
@@ -205,6 +211,8 @@ def _pre_hint(text: str):
     t = (text or "").lower()
     if any(x in t for x in ["last 5 ucl", "last five ucl", "ucl winners", "recent champions league winners", "last 5 champions league winners"]):
         return "Use tool_ucl_last_n_winners first, then summarize."
+    if any(k in t for k in ["last score between", "last result between", "h2h", "head to head", "vs", "versus"]):
+        return "Use tool_af_last_result_vs first, then (if needed) tool_h2h_officialish."
     if any(w in t for w in ["who won", "winners", "champions", "finals", "season", "history"]):
         return "Use tool_history_lookup first."
     if "news" in t or "rumor" in t:

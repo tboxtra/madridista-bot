@@ -83,3 +83,24 @@ def tool_ucl_last_n_winners(args: Dict[str, Any]) -> Dict[str, Any]:
         "ok": True, "__source": "Wikipedia", "items": winners,
         "page": "https://en.wikipedia.org/wiki/List_of_European_Cup_and_UEFA_Champions_League_finals"
     }
+
+def tool_h2h_officialish(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Try to assemble an official-ish H2H summary from Wikipedia competition pages
+    when API-Football intersections aren't enough (e.g., only European ties).
+    Args: team_a (str), team_b (str)
+    """
+    a = (args.get("team_a") or "").strip()
+    b = (args.get("team_b") or "").strip()
+    if not a or not b:
+        return {"ok": False, "__source": "Wikipedia", "message": "team_a and team_b required."}
+
+    # Use Wikipedia search like "Real Madrid vs Arsenal head-to-head"
+    topic = f"{a} vs {b}"
+    page = wiki.wiki_lookup(topic) or wiki.wiki_lookup(f"{a}–{b}") or wiki.wiki_lookup(f"{a} v {b}")
+    if not page:
+        return {"ok": False, "__source": "Wikipedia", "message": "No dedicated H2H page."}
+
+    # We return the extract + url; the LLM can summarize W/D/L if present in text.
+    return {"ok": True, "__source": "Wikipedia", "title": page.get("title"),
+            "url": page.get("url"), "extract": page.get("extract")}
