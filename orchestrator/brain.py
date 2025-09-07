@@ -164,6 +164,8 @@ FUNCTIONS = [
    "parameters":{"type":"object","properties":{"team_a_id":{"type":"integer"},"team_b_id":{"type":"integer"},"team_a":{"type":"string"},"team_b":{"type":"string"},"days_back":{"type":"integer"}}}},
   {"name":"tool_h2h_officialish","description":"H2H summary via Wikipedia if official pages exist",
    "parameters":{"type":"object","properties":{"team_a":{"type":"string"},"team_b":{"type":"string"}}}},
+  {"name":"tool_af_find_match_result","description":"Find specific match result between two teams (e.g., when team_a beat team_b)",
+   "parameters":{"type":"object","properties":{"team_a_id":{"type":"integer"},"team_b_id":{"type":"integer"},"team_a":{"type":"string"},"team_b":{"type":"string"},"winner":{"type":"string"},"max_items":{"type":"integer"}}}},
   {"name":"tool_af_next_fixture","description":"Next fixture via API-Football","parameters":{"type":"object","properties":{"team_id":{"type":"integer"}}}},
   {"name":"tool_af_last_result","description":"Last finished via API-Football","parameters":{"type":"object","properties":{"team_id":{"type":"integer"}}}},
   {"name":"tool_sofa_form","description":"Recent form via SofaScore","parameters":{"type":"object","properties":{"team_id":{"type":"integer"},"k":{"type":"integer"}}}},
@@ -200,6 +202,7 @@ NAME_TO_FUNC = {
   "tool_af_next_fixture": TX.tool_af_next_fixture,
   "tool_af_last_result": TX.tool_af_last_result,
   "tool_af_last_result_vs": TX.tool_af_last_result_vs,
+  "tool_af_find_match_result": TX.tool_af_find_match_result,
   "tool_sofa_form": TX.tool_sofa_form,
   "tool_news_top": TX.tool_news_top,
   "tool_highlights": TX.tool_highlights,
@@ -215,6 +218,8 @@ def _pre_hint(text: str):
         return "Use tool_ucl_last_n_winners first, then summarize."
     if any(k in t for k in ["last score between", "last result between", "h2h", "head to head", "vs", "versus"]):
         return "Use tool_af_last_result_vs first, then (if needed) tool_h2h_officialish."
+    if any(k in t for k in ["happened when", "beat", "defeated", "won against", "when did"]):
+        return "Use tool_af_find_match_result first to find specific match results."
     if any(w in t for w in ["who won", "winners", "champions", "finals", "season", "history"]):
         return "Use tool_history_lookup first."
     if "news" in t or "rumor" in t:

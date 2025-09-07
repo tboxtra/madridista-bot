@@ -99,3 +99,67 @@ def tool_af_last_result_vs(args: Dict[str, Any]) -> Dict[str, Any]:
         "competition": last.get("league",{}).get("name", ""),
         "total_h2h_found": len(finished)
     }
+
+def tool_af_find_match_result(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Find a specific match result between two teams (e.g., when team_a beat team_b).
+    Args: team_a_id (int), team_b_id (int), team_a (str), team_b (str), winner (str), max_items (int=50)
+    """
+    # Support both ID and name inputs
+    a = int(args.get("team_a_id") or 0) or af_id(args.get("team_a") or "")
+    b = int(args.get("team_b_id") or 0) or af_id(args.get("team_b") or "")
+    winner = (args.get("winner") or "").lower()
+    max_items = int(args.get("max_items", 50))
+    
+    if not a or not b:
+        return {"ok": False, "__source": CIT_AF, "message": "team_a_id/team_a and team_b_id/team_b required."}
+
+    # Get H2H fixtures
+    h2h_fixtures = AF.fixtures_h2h(a, b, max_items=max_items)
+    
+    # Keep finished games only
+    finished = [x for x in h2h_fixtures if (x.get("fixture",{}).get("status",{}).get("short") in {"FT","AET","PEN"})]
+
+    if not finished:
+        return {"ok": False, "__source": CIT_AF, "message": f"No competitive meetings found between these teams."}
+
+    # If winner is specified, filter for matches where that team won
+    if winner:
+        winner_matches = []
+        for match in finished:
+            teams = match.get("teams", {})
+            goals = match.get("goals", {})
+            home_team = teams.get("home", {}).get("name", "").lower()
+            away_team = teams.get("away", {}).get("name", "").lower()
+            home_score = goals.get("home", 0)
+            away_score = goals.get("away", 0)
+            
+            # Check if the specified winner actually won this match
+            if winner in home_team and home_score > away_score:
+                winner_matches.append(match)
+            elif winner in away_team and away_score > home_score:
+                winner_matches.append(match)
+        
+        if winner_matches:
+            finished = winner_matches
+        else:
+            return {"ok": False, "__source": CIT_AF, "message": f"No matches found where {winner} beat the opponent."}
+
+    # Return the most recent match (or the most recent match where winner won)
+    last = finished[0]
+    fx = last.get("fixture", {})
+    teams = last.get("teams", {})
+    goals = last.get("goals", {})
+    
+    return {
+        "ok": True, "__source": CIT_AF,
+        "when": fx.get("date"),
+        "home": teams.get("home", {}).get("name"),
+        "away": teams.get("away", {}).get("name"),
+        "home_score": goals.get("home"),
+        "away_score": goals.get("away"),
+        "fixture_id": fx.get("id"),
+        "competition": last.get("league", {}).get("name", ""),
+        "total_h2h_found": len(finished),
+        "winner_filter": winner if winner else None
+    }
