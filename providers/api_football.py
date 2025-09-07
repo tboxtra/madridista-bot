@@ -45,6 +45,22 @@ def fixtures_historical(team_id, days_back=1825, max_items=100):
     data.sort(key=lambda x: x.get("fixture",{}).get("date",""), reverse=True)
     return data[:max_items]
 
+def fixtures_h2h(team_a_id, team_b_id, max_items=20):
+    """
+    Get head-to-head fixtures between two teams using the dedicated H2H endpoint.
+    Args:
+        team_a_id: First team ID
+        team_b_id: Second team ID
+        max_items: Maximum number of fixtures to return
+    """
+    r = get(f"{BASE}/fixtures/headtohead", headers=_hdr(), params={
+        "h2h": f"{team_a_id}-{team_b_id}"
+    })
+    data = r.json().get("response", [])
+    # Sort by date descending (most recent first)
+    data.sort(key=lambda x: x.get("fixture",{}).get("date",""), reverse=True)
+    return data[:max_items]
+
 def live_by_team(team_id):
     r = get(f"{BASE}/fixtures", headers=_hdr(), params={"live": "all"})
     arr = r.json().get("response", [])

@@ -64,39 +64,27 @@ def tool_odds_snapshot(args: Dict[str, Any]) -> Dict[str, Any]:
 
 def tool_af_last_result_vs(args: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Get the most recent competitive result between two teams using API-Football fixtures.
-    Searches from current date back to maximum available history.
-    Args: team_a_id (int), team_b_id (int), team_a (str), team_b (str), days_back (int=3650)
+    Get the most recent competitive result between two teams using API-Football H2H endpoint.
+    Args: team_a_id (int), team_b_id (int), team_a (str), team_b (str), max_items (int=50)
     """
     # Support both ID and name inputs
     a = int(args.get("team_a_id") or 0) or af_id(args.get("team_a") or "")
     b = int(args.get("team_b_id") or 0) or af_id(args.get("team_b") or "")
-    days_back = int(args.get("days_back", 3650))  # 10 years default for comprehensive search
+    max_items = int(args.get("max_items", 50))  # Get more H2H results for comprehensive search
     
     if not a or not b:
         return {"ok": False, "__source": CIT_AF, "message": "team_a_id/team_a and team_b_id/team_b required."}
 
-    # Use historical fixtures search with comprehensive date range
-    fa = AF.fixtures_historical(a, days_back=days_back, max_items=200)
-    fb = AF.fixtures_historical(b, days_back=days_back, max_items=200)
+    # Use dedicated H2H endpoint for direct head-to-head results
+    h2h_fixtures = AF.fixtures_h2h(a, b, max_items=max_items)
     
-    # Index by fixture id for speed
-    ids_b = {x.get("fixture",{}).get("id") for x in fb}
-    inter = [x for x in fa if x.get("fixture",{}).get("id") in ids_b]
+    # Keep finished games only, newest first (already sorted by the API function)
+    finished = [x for x in h2h_fixtures if (x.get("fixture",{}).get("status",{}).get("short") in {"FT","AET","PEN"})]
 
-    # Fallback: filter by opponent id if no intersection found
-    if not inter:
-        inter = [x for x in fa if (x.get("teams",{}).get("home",{}).get("id")==b or
-                                   x.get("teams",{}).get("away",{}).get("id")==b)]
+    if not finished:
+        return {"ok": False, "__source": CIT_AF, "message": f"No competitive meetings found between these teams."}
 
-    # Keep finished games only, newest first
-    inter = [x for x in inter if (x.get("fixture",{}).get("status",{}).get("short") in {"FT","AET","PEN"})]
-    inter.sort(key=lambda x: x.get("fixture",{}).get("date",""), reverse=True)
-
-    if not inter:
-        return {"ok": False, "__source": CIT_AF, "message": f"No competitive meetings found in the last {days_back} days."}
-
-    last = inter[0]
+    last = finished[0]
     fx   = last.get("fixture",{})
     teams= last.get("teams",{})
     goals= last.get("goals",{})
@@ -109,5 +97,5 @@ def tool_af_last_result_vs(args: Dict[str, Any]) -> Dict[str, Any]:
         "away_score": goals.get("away"),
         "fixture_id": fx.get("id"),
         "competition": last.get("league",{}).get("name", ""),
-        "search_period_days": days_back
+        "total_h2h_found": len(finished)
     }
