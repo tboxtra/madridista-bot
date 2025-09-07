@@ -9,7 +9,9 @@ CTX_MAX_MSGS = int(os.getenv("CONTEXT_MAX_MSGS", "30"))       # raw messages kep
 CTX_SUMMARY_EVERY = int(os.getenv("CONTEXT_SUMMARY_EVERY", "20"))  # summarize after N msgs
 SUMMARY_MAX_TOKENS = int(os.getenv("SUMMARY_MAX_TOKENS", "200"))
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+def _get_client():
+    """Lazy initialization of OpenAI client"""
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 class ChatMemory:
@@ -50,7 +52,7 @@ class ChatMemory:
             {"role":"user","content": "Recent Messages:\n" + "\n".join(bullets)}
         ]
         try:
-            r = client.chat.completions.create(model=MODEL, messages=msgs, max_tokens=SUMMARY_MAX_TOKENS, temperature=0.2)
+            r = _get_client().chat.completions.create(model=MODEL, messages=msgs, max_tokens=SUMMARY_MAX_TOKENS, temperature=0.2)
             out = (r.choices[0].message.content or "").strip()
             # Merge: keep latest as new summary (simple replace; could be concatenation)
             self.summary = out
