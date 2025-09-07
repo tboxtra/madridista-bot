@@ -116,6 +116,8 @@ SYSTEM = (
   "- If about live games, recent form, or current stats, use SofaScore tools.\n"
   "- If about news or headlines, use tool_news_top.\n"
   "- If about Real Madrid UCL history specifically, use tool_rm_ucl_titles.\n"
+  "- If asking about specific match results (e.g., 'What happened when Arsenal beat Real Madrid'), use tool_af_find_match_result.\n"
+  "- If asking about head-to-head records, use tool_af_last_result_vs or tool_h2h_officialish.\n"
   "If multiple tools might be useful, call them all, then combine the results naturally. "
   "Think step by step: understand the question, select appropriate tools, fetch data, then compose your fanboy response. "
   "Prefer Real Madrid & LaLiga. Be concise (1–3 short paragraphs). Keep banter clean."
@@ -164,7 +166,7 @@ FUNCTIONS = [
    "parameters":{"type":"object","properties":{"team_a_id":{"type":"integer"},"team_b_id":{"type":"integer"},"team_a":{"type":"string"},"team_b":{"type":"string"},"days_back":{"type":"integer"}}}},
   {"name":"tool_h2h_officialish","description":"H2H summary via Wikipedia if official pages exist",
    "parameters":{"type":"object","properties":{"team_a":{"type":"string"},"team_b":{"type":"string"}}}},
-  {"name":"tool_af_find_match_result","description":"Find specific match result between two teams (e.g., when team_a beat team_b)",
+  {"name":"tool_af_find_match_result","description":"Find specific match result between two teams (e.g., when team_a beat team_b). Use this for queries like 'What happened when Arsenal beat Real Madrid' or 'When did Barcelona defeat Manchester United'",
    "parameters":{"type":"object","properties":{"team_a_id":{"type":"integer"},"team_b_id":{"type":"integer"},"team_a":{"type":"string"},"team_b":{"type":"string"},"winner":{"type":"string"},"max_items":{"type":"integer"}}}},
   {"name":"tool_af_next_fixture","description":"Next fixture via API-Football","parameters":{"type":"object","properties":{"team_id":{"type":"integer"}}}},
   {"name":"tool_af_last_result","description":"Last finished via API-Football","parameters":{"type":"object","properties":{"team_id":{"type":"integer"}}}},
@@ -312,7 +314,7 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             if LOG_TOOL_CALLS:
                 print(f"[brain] Forcing tool retry for factual query: {text[:100]}")
             msgs.insert(1, {"role":"system","content":
-                "This is a factual football query. You MUST call at least one tool (fixtures/results/H2H/history) before answering."})
+                "This is a factual football query. You MUST call at least one tool before answering. For match result queries like 'What happened when X beat Y', use tool_af_find_match_result. For H2H queries, use tool_af_last_result_vs or tool_h2h_officialish. For historical queries, use tool_history_lookup."})
             r = _get_client().chat.completions.create(
                 model="gpt-4o-mini",
                 messages=msgs,
@@ -547,7 +549,12 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                 print(f"[brain] LLM failed, trying arbiter cascade for factual query: {text[:100]}")
             try:
                 # Try arbiter cascade as fallback
-                for tool_name in plan_tools(text):
+                plan = plan_tools(text)
+                if LOG_TOOL_CALLS:
+                    print(f"[brain] Arbiter plan: {plan}")
+                for tool_name in plan:
+                    if LOG_TOOL_CALLS:
+                        print(f"[brain] Trying tool: {tool_name}")
                     # Extract team names and winner for H2H tools
                     args = {}
                     if tool_name in ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_af_find_match_result"]:
@@ -610,9 +617,15 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                     if fn:
                         try:
                             res = fn(args or {})
+                            if LOG_TOOL_CALLS:
+                                print(f"[brain] Tool {tool_name} result: {res}")
                             if res.get("ok") is True and not _empty(res):
                                 # Return the tool result directly
                                 return f"Based on the data: {res.get('message', 'No specific details available')}"
+                            elif res.get("ok") is False and res.get("message"):
+                                # Tool returned a specific error message, log it
+                                if LOG_TOOL_CALLS:
+                                    print(f"[brain] Tool {tool_name} returned: {res.get('message')}")
                         except Exception as tool_e:
                             if LOG_TOOL_CALLS:
                                 print(f"[brain] Tool {tool_name} failed: {tool_e}")
