@@ -540,4 +540,88 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             print(f"[brain] Exception: {e}")
             import traceback
             traceback.print_exc()
+        
+        # If LLM call failed but this is a factual query, try arbiter cascade
+        if _looks_factual(text):
+            if LOG_TOOL_CALLS:
+                print(f"[brain] LLM failed, trying arbiter cascade for factual query: {text[:100]}")
+            try:
+                # Try arbiter cascade as fallback
+                for tool_name in plan_tools(text):
+                    # Extract team names and winner for H2H tools
+                    args = {}
+                    if tool_name in ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_af_find_match_result"]:
+                        import re
+                        
+                        # Enhanced team extraction - look for common team patterns
+                        team_patterns = [
+                            r'\b(?:Real Madrid|Madrid|Arsenal|Barcelona|Barca|Manchester City|City|Liverpool|Chelsea|Tottenham|Bayern|PSG|Juventus|Milan|Inter|Napoli|Roma|Lazio|Dortmund|Leipzig|Ajax|Porto|Benfica|Celtic|Rangers|Sevilla|Valencia|Sociedad|Bilbao|Villarreal|Betis|Atletico|Atleti)\b',
+                            r'\b(?:Manchester United|United|Man United|Man Utd|Man U|MUFC)\b',
+                            r'\b(?:Atletico Madrid|Atletico|Atleti)\b',
+                            r'\b(?:Real Sociedad|Sociedad)\b',
+                            r'\b(?:Athletic Bilbao|Bilbao)\b'
+                        ]
+                        
+                        teams = []
+                        for pattern in team_patterns:
+                            matches = re.findall(pattern, text, re.IGNORECASE)
+                            teams.extend(matches)
+                        
+                        # Remove duplicates while preserving order
+                        seen = set()
+                        unique_teams = []
+                        for team in teams:
+                            if team.lower() not in seen:
+                                unique_teams.append(team)
+                                seen.add(team.lower())
+                        
+                        if len(unique_teams) >= 2:
+                            args = {"team_a": unique_teams[0], "team_b": unique_teams[1]}
+                        elif "vs" in text.lower() or "versus" in text.lower():
+                            # Try to split on vs/versus
+                            parts = re.split(r'\s+vs\.?\s+|\s+versus\s+', text, flags=re.IGNORECASE)
+                            if len(parts) >= 2:
+                                args = {"team_a": parts[0].strip(), "team_b": parts[1].strip()}
+                        
+                        # For tool_af_find_match_result, also extract winner
+                        if tool_name == "tool_af_find_match_result":
+                            # Look for patterns like "when Arsenal beat", "Arsenal defeated", "Arsenal won"
+                            winner_patterns = [
+                                r'when\s+(\w+(?:\s+\w+)?)\s+beat',
+                                r'(\w+(?:\s+\w+)?)\s+beat\s+',
+                                r'(\w+(?:\s+\w+)?)\s+defeated\s+',
+                                r'(\w+(?:\s+\w+)?)\s+won\s+against',
+                                r'(\w+(?:\s+\w+)?)\s+won\s+',
+                                r'when\s+did\s+(\w+(?:\s+\w+)?)\s+defeat',
+                                r'(\w+(?:\s+\w+)?)\s+defeat\s+',
+                            ]
+                            
+                            for pattern in winner_patterns:
+                                match = re.search(pattern, text, re.IGNORECASE)
+                                if match:
+                                    winner = match.group(1).strip()
+                                    # Clean up common variations
+                                    winner = re.sub(r'\s+(vs|versus|against)\s+.*$', '', winner, flags=re.IGNORECASE)
+                                    args["winner"] = winner
+                                    break
+                    
+                    # Run the tool
+                    fn = NAME_TO_FUNC.get(tool_name)
+                    if fn:
+                        try:
+                            res = fn(args or {})
+                            if res.get("ok") is True and not _empty(res):
+                                # Return the tool result directly
+                                return f"Based on the data: {res.get('message', 'No specific details available')}"
+                        except Exception as tool_e:
+                            if LOG_TOOL_CALLS:
+                                print(f"[brain] Tool {tool_name} failed: {tool_e}")
+                            continue  # Try next tool
+                
+                # If no tools worked, return a more specific message
+                return "I couldn't find specific match data for that query. The teams may not have played recently or the data may not be available."
+            except Exception as arbiter_e:
+                if LOG_TOOL_CALLS:
+                    print(f"[brain] Arbiter cascade also failed: {arbiter_e}")
+        
         return f"I had trouble processing that request. Please try again or use specific commands like /matches, /table, or /live."
