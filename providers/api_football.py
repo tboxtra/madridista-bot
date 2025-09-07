@@ -22,6 +22,29 @@ def fixtures_last(team_id, max_items=1):
     r = get(f"{BASE}/fixtures", headers=_hdr(), params={"team": team_id, "last": max_items})
     return r.json().get("response", [])
 
+def fixtures_historical(team_id, days_back=1825, max_items=100):
+    """
+    Get historical fixtures for a team from current date back to specified days.
+    Args:
+        team_id: Team ID
+        days_back: Number of days to search back (default 5 years)
+        max_items: Maximum number of fixtures to return
+    """
+    from datetime import datetime, timedelta
+    dto = datetime.now()
+    dfrom = dto - timedelta(days=days_back)
+    
+    r = get(f"{BASE}/fixtures", headers=_hdr(), params={
+        "team": team_id, 
+        "from": dfrom.isoformat(), 
+        "to": dto.isoformat(),
+        "status": "FT"  # Only finished matches
+    })
+    data = r.json().get("response", [])
+    # Sort by date descending (most recent first)
+    data.sort(key=lambda x: x.get("fixture",{}).get("date",""), reverse=True)
+    return data[:max_items]
+
 def live_by_team(team_id):
     r = get(f"{BASE}/fixtures", headers=_hdr(), params={"live": "all"})
     arr = r.json().get("response", [])

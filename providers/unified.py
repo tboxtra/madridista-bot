@@ -14,8 +14,9 @@ def _today_iso():
 
 def fd_team_matches(team_id: int, status: str = None, limit=20, window_days: int = 120):
     """
-    Fresh matches only.
-    Football-Data supports dateFrom/dateTo filtering; we default to the last ~4 months.
+    Get team matches with configurable date window.
+    Football-Data supports dateFrom/dateTo filtering.
+    For historical searches, use larger window_days values.
     """
     today = _today_iso()
     date_from = (today - timedelta(days=window_days)).isoformat()
@@ -29,6 +30,13 @@ def fd_team_matches(team_id: int, status: str = None, limit=20, window_days: int
     # sort DESC by utcDate (latest first)
     ms.sort(key=lambda x: x["utcDate"], reverse=True)
     return ms[:limit]
+
+def fd_team_matches_historical(team_id: int, status: str = None, limit=50, window_days: int = 3650):
+    """
+    Get historical team matches with extended date window (default 10 years).
+    Use this for comprehensive historical searches.
+    """
+    return fd_team_matches(team_id, status, limit, window_days)
 
 def fd_comp_table(comp_id: int):
     r = S.get(f"{FD_BASE}/competitions/{comp_id}/standings", timeout=20)
