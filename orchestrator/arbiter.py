@@ -47,15 +47,23 @@ def plan_tools(user_q: str) -> List[str]:
     Keep names aligned with NAME_TO_FUNC in brain.
     """
     plan = []
-    if _looks_live(user_q):           plan += ["tool_live_now", "tool_af_last_result"]
-    if _looks_next(user_q):           plan += ["tool_af_next_fixture", "tool_next_fixture"]
-    if _looks_last(user_q):           plan += ["tool_af_last_result", "tool_last_result"]
-    if _looks_news(user_q):           plan += ["tool_news_top"]
-    if _looks_players(user_q):        plan += ["tool_player_stats", "tool_compare_players"]
-    if _looks_compare(user_q):        plan += ["tool_af_find_match_result", "tool_af_last_result_vs", "tool_h2h_officialish", "tool_h2h_summary", "tool_compare_teams"]
-    if _looks_history(user_q):        plan += ["tool_history_lookup"]
+    
+    # Priority 1: Specific match result queries (most specific first)
+    if _looks_compare(user_q) and any(w in user_q.lower() for w in ["happened when", "beat", "defeated", "won against", "when did", "defeat"]):
+        plan += ["tool_af_find_match_result", "tool_af_last_result_vs", "tool_h2h_officialish", "tool_h2h_summary", "tool_compare_teams"]
+    
+    # Priority 2: Other intents
+    elif _looks_live(user_q):           plan += ["tool_live_now", "tool_af_last_result"]
+    elif _looks_next(user_q):           plan += ["tool_af_next_fixture", "tool_next_fixture"]
+    elif _looks_last(user_q):           plan += ["tool_af_last_result", "tool_last_result"]
+    elif _looks_news(user_q):           plan += ["tool_news_top"]
+    elif _looks_players(user_q):        plan += ["tool_player_stats", "tool_compare_players"]
+    elif _looks_compare(user_q):        plan += ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_h2h_summary", "tool_compare_teams"]
+    elif _looks_history(user_q):        plan += ["tool_history_lookup"]
+    
     # Always add general fallbacks at the end:
     plan += ["tool_sofa_form", "tool_table", "tool_history_lookup"]
+    
     # De-dup while preserving order
     seen=set(); ordered=[]
     for t in plan:

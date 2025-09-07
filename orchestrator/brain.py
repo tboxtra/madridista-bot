@@ -327,19 +327,62 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
         if needs_facts and not getattr(msg, "tool_calls", None):
             # 1) Planned cascade: try likely tools in order until one yields non-empty, valid data
             for tool_name in plan_tools(text):
-                # Extract team names for H2H tools
+                # Extract team names and winner for H2H tools
                 args = {}
-                if tool_name in ["tool_af_last_result_vs", "tool_h2h_officialish"]:
-                    # Simple team extraction for H2H queries
+                if tool_name in ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_af_find_match_result"]:
                     import re
-                    teams = re.findall(r'\b(?:Real Madrid|Madrid|Arsenal|Barcelona|Barca|Manchester City|City|Liverpool|Chelsea|Tottenham|Bayern|PSG|Juventus|Milan|Inter|Napoli|Roma|Lazio|Dortmund|Leipzig|Ajax|Porto|Benfica|Celtic|Rangers|Sevilla|Valencia|Sociedad|Bilbao|Villarreal|Betis|Atletico|Atleti)\b', text, re.IGNORECASE)
-                    if len(teams) >= 2:
-                        args = {"team_a": teams[0], "team_b": teams[1]}
+                    
+                    # Enhanced team extraction - look for common team patterns
+                    team_patterns = [
+                        r'\b(?:Real Madrid|Madrid|Arsenal|Barcelona|Barca|Manchester City|City|Liverpool|Chelsea|Tottenham|Bayern|PSG|Juventus|Milan|Inter|Napoli|Roma|Lazio|Dortmund|Leipzig|Ajax|Porto|Benfica|Celtic|Rangers|Sevilla|Valencia|Sociedad|Bilbao|Villarreal|Betis|Atletico|Atleti)\b',
+                        r'\b(?:Manchester United|United|Man United|Man Utd|Man U|MUFC)\b',
+                        r'\b(?:Atletico Madrid|Atletico|Atleti)\b',
+                        r'\b(?:Real Sociedad|Sociedad)\b',
+                        r'\b(?:Athletic Bilbao|Bilbao)\b'
+                    ]
+                    
+                    teams = []
+                    for pattern in team_patterns:
+                        matches = re.findall(pattern, text, re.IGNORECASE)
+                        teams.extend(matches)
+                    
+                    # Remove duplicates while preserving order
+                    seen = set()
+                    unique_teams = []
+                    for team in teams:
+                        if team.lower() not in seen:
+                            unique_teams.append(team)
+                            seen.add(team.lower())
+                    
+                    if len(unique_teams) >= 2:
+                        args = {"team_a": unique_teams[0], "team_b": unique_teams[1]}
                     elif "vs" in text.lower() or "versus" in text.lower():
                         # Try to split on vs/versus
                         parts = re.split(r'\s+vs\.?\s+|\s+versus\s+', text, flags=re.IGNORECASE)
                         if len(parts) >= 2:
                             args = {"team_a": parts[0].strip(), "team_b": parts[1].strip()}
+                    
+                    # For tool_af_find_match_result, also extract winner
+                    if tool_name == "tool_af_find_match_result":
+                        # Look for patterns like "when Arsenal beat", "Arsenal defeated", "Arsenal won"
+                        winner_patterns = [
+                            r'when\s+(\w+(?:\s+\w+)?)\s+beat',
+                            r'(\w+(?:\s+\w+)?)\s+beat\s+',
+                            r'(\w+(?:\s+\w+)?)\s+defeated\s+',
+                            r'(\w+(?:\s+\w+)?)\s+won\s+against',
+                            r'(\w+(?:\s+\w+)?)\s+won\s+',
+                            r'when\s+did\s+(\w+(?:\s+\w+)?)\s+defeat',
+                            r'(\w+(?:\s+\w+)?)\s+defeat\s+',
+                        ]
+                        
+                        for pattern in winner_patterns:
+                            match = re.search(pattern, text, re.IGNORECASE)
+                            if match:
+                                winner = match.group(1).strip()
+                                # Clean up common variations
+                                winner = re.sub(r'\s+(vs|versus|against)\s+.*$', '', winner, flags=re.IGNORECASE)
+                                args["winner"] = winner
+                                break
                 
                 res = _run_call(tool_name, args)
                 ok = (res.get("ok") is True) and (not _empty(res))
