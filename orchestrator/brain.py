@@ -557,7 +557,7 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                         print(f"[brain] Trying tool: {tool_name}")
                     # Extract team names and winner for H2H tools
                     args = {}
-                    if tool_name in ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_af_find_match_result"]:
+                    if tool_name in ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_af_find_match_result", "tool_h2h_summary"]:
                         import re
                         
                         # Enhanced team extraction - look for common team patterns
@@ -611,6 +611,10 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                                     winner = re.sub(r'\s+(vs|versus|against)\s+.*$', '', winner, flags=re.IGNORECASE)
                                     args["winner"] = winner
                                     break
+                    
+                    # Special handling for tool_history_lookup
+                    if tool_name == "tool_history_lookup":
+                        args["query"] = text
                     
                     # Run the tool
                     fn = NAME_TO_FUNC.get(tool_name)

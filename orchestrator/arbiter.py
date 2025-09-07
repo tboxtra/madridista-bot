@@ -22,7 +22,11 @@ def _looks_next(q: str) -> bool:
 
 def _looks_last(q: str) -> bool:
     ql = (q or "").lower()
-    return any(w in ql for w in ["last","previous","most recent","result","score","final score","ft","ended","beat","defeated","won","happened when"])
+    # Only match single-team last result queries, not H2H queries
+    has_h2h_indicators = any(w in ql for w in ["vs","versus","between","h2h","head to head"])
+    if has_h2h_indicators:
+        return False
+    return any(w in ql for w in ["last","previous","most recent","result","score","final score","ft","ended"])
 
 def _looks_news(q: str) -> bool:
     ql = (q or "").lower()
@@ -39,7 +43,8 @@ def _looks_players(q: str) -> bool:
 
 def _looks_compare(q: str) -> bool:
     ql = (q or "").lower()
-    return any(w in ql for w in ["compare","vs","versus","h2h","head to head","last score between","last result between","beat","defeated","won against","when","between"])
+    # Match H2H queries, team comparisons, and specific match result queries
+    return any(w in ql for w in ["compare","vs","versus","h2h","head to head","last score between","last result between","beat","defeated","won against","when","between","happened when"])
 
 def plan_tools(user_q: str) -> List[str]:
     """
