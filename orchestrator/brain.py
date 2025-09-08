@@ -110,16 +110,23 @@ SYSTEM = (
   "ALWAYS think about the question FIRST before answering. "
   "For any factual information, you must SELECT the best tool to fetch data before responding. "
   "You are never allowed to make up data or dates. "
-  "Examples:\n"
+  
+  "IMPORTANT: You must recognize team names in ALL their variations and forms. "
+  "Teams can be referred to by their full names, short names, nicknames, or abbreviations. "
+  "Examples: 'Man City' = 'Manchester City', 'Barca' = 'Barcelona', 'Spurs' = 'Tottenham', 'Juve' = 'Juventus', etc. "
+  "Always extract the correct team names from the user's question and pass them to the appropriate tools. "
+  
+  "Tool Selection Guide:\n"
+  "- If asking about specific match results (e.g., 'What happened when Arsenal beat Real Madrid'), use tool_af_find_match_result with team_a, team_b, and winner parameters.\n"
+  "- If asking about head-to-head records or last scores between teams, use tool_af_last_result_vs or tool_h2h_officialish.\n"
   "- If about past champions, winners, or historical records, use tool_history_lookup.\n"
   "- If about next fixtures or upcoming matches, use tool_af_next_fixture.\n"
   "- If about live games, recent form, or current stats, use SofaScore tools.\n"
   "- If about news or headlines, use tool_news_top.\n"
   "- If about Real Madrid UCL history specifically, use tool_rm_ucl_titles.\n"
-  "- If asking about specific match results (e.g., 'What happened when Arsenal beat Real Madrid'), use tool_af_find_match_result.\n"
-  "- If asking about head-to-head records, use tool_af_last_result_vs or tool_h2h_officialish.\n"
+  
   "If multiple tools might be useful, call them all, then combine the results naturally. "
-  "Think step by step: understand the question, select appropriate tools, fetch data, then compose your fanboy response. "
+  "Think step by step: understand the question, recognize team names in all variations, select appropriate tools with correct parameters, fetch data, then compose your fanboy response. "
   "Prefer Real Madrid & LaLiga. Be concise (1–3 short paragraphs). Keep banter clean."
 )
 
@@ -314,7 +321,11 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
             if LOG_TOOL_CALLS:
                 print(f"[brain] Forcing tool retry for factual query: {text[:100]}")
             msgs.insert(1, {"role":"system","content":
-                "This is a factual football query. You MUST call at least one tool before answering. For match result queries like 'What happened when X beat Y', use tool_af_find_match_result. For H2H queries, use tool_af_last_result_vs or tool_h2h_officialish. For historical queries, use tool_history_lookup."})
+                "This is a factual football query. You MUST call at least one tool before answering. "
+                "IMPORTANT: Recognize team names in ALL variations (Man City, Barca, Spurs, Juve, etc.) and extract them correctly. "
+                "For match result queries like 'What happened when X beat Y', use tool_af_find_match_result with team_a, team_b, and winner parameters. "
+                "For H2H queries, use tool_af_last_result_vs or tool_h2h_officialish with team_a and team_b parameters. "
+                "For historical queries, use tool_history_lookup with the query parameter."})
             r = _get_client().chat.completions.create(
                 model="gpt-4o-mini",
                 messages=msgs,
@@ -555,64 +566,10 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                 for tool_name in plan:
                     if LOG_TOOL_CALLS:
                         print(f"[brain] Trying tool: {tool_name}")
-                    # Extract team names and winner for H2H tools
+                    # Let the AI handle team extraction through proper tool calling
+                    # The arbiter cascade should only be a fallback when LLM completely fails
+                    # For now, pass the original query to tools that can handle it
                     args = {}
-                    if tool_name in ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_af_find_match_result", "tool_h2h_summary"]:
-                        import re
-                        
-                        # Enhanced team extraction - look for common team patterns
-                        team_patterns = [
-                            r'\b(?:Real Madrid|Madrid|Arsenal|Barcelona|Barca|Manchester City|Man City|Manchester|City|Liverpool|Chelsea|Tottenham|Bayern|PSG|Juventus|Milan|Inter|Napoli|Roma|Lazio|Dortmund|Leipzig|Ajax|Porto|Benfica|Celtic|Rangers|Sevilla|Valencia|Sociedad|Bilbao|Villarreal|Betis|Atletico|Atleti)\b',
-                            r'\b(?:Manchester United|United|Man United|Man Utd|Man U|MUFC)\b',
-                            r'\b(?:Atletico Madrid|Atletico|Atleti)\b',
-                            r'\b(?:Real Sociedad|Sociedad)\b',
-                            r'\b(?:Athletic Bilbao|Bilbao)\b'
-                        ]
-                        
-                        teams = []
-                        for pattern in team_patterns:
-                            matches = re.findall(pattern, text, re.IGNORECASE)
-                            teams.extend(matches)
-                        
-                        # Remove duplicates while preserving order
-                        seen = set()
-                        unique_teams = []
-                        for team in teams:
-                            if team.lower() not in seen:
-                                unique_teams.append(team)
-                                seen.add(team.lower())
-                        
-                        if len(unique_teams) >= 2:
-                            args = {"team_a": unique_teams[0], "team_b": unique_teams[1]}
-                        elif "vs" in text.lower() or "versus" in text.lower():
-                            # Try to split on vs/versus
-                            parts = re.split(r'\s+vs\.?\s+|\s+versus\s+', text, flags=re.IGNORECASE)
-                            if len(parts) >= 2:
-                                args = {"team_a": parts[0].strip(), "team_b": parts[1].strip()}
-                        
-                        # For tool_af_find_match_result, also extract winner
-                        if tool_name == "tool_af_find_match_result":
-                            # Look for patterns like "when Arsenal beat", "Arsenal defeated", "Arsenal won"
-                            winner_patterns = [
-                                r'when\s+(\w+(?:\s+\w+)?)\s+beat',
-                                r'(\w+(?:\s+\w+)?)\s+beat\s+',
-                                r'(\w+(?:\s+\w+)?)\s+defeated\s+',
-                                r'(\w+(?:\s+\w+)?)\s+won\s+against',
-                                r'(\w+(?:\s+\w+)?)\s+won\s+',
-                                r'when\s+did\s+(\w+(?:\s+\w+)?)\s+defeat',
-                                r'(\w+(?:\s+\w+)?)\s+defeat\s+',
-                            ]
-                            
-                            for pattern in winner_patterns:
-                                match = re.search(pattern, text, re.IGNORECASE)
-                                if match:
-                                    winner = match.group(1).strip()
-                                    # Clean up common variations
-                                    winner = re.sub(r'\s+(vs|versus|against)\s+.*$', '', winner, flags=re.IGNORECASE)
-                                    args["winner"] = winner
-                                    break
-                    
-                    # Special handling for tool_history_lookup
                     if tool_name == "tool_history_lookup":
                         args["query"] = text
                     
