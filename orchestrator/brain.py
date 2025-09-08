@@ -562,7 +562,7 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                         
                         # Enhanced team extraction - look for common team patterns
                         team_patterns = [
-                            r'\b(?:Real Madrid|Madrid|Arsenal|Barcelona|Barca|Manchester City|City|Liverpool|Chelsea|Tottenham|Bayern|PSG|Juventus|Milan|Inter|Napoli|Roma|Lazio|Dortmund|Leipzig|Ajax|Porto|Benfica|Celtic|Rangers|Sevilla|Valencia|Sociedad|Bilbao|Villarreal|Betis|Atletico|Atleti)\b',
+                            r'\b(?:Real Madrid|Madrid|Arsenal|Barcelona|Barca|Manchester City|Man City|Manchester|City|Liverpool|Chelsea|Tottenham|Bayern|PSG|Juventus|Milan|Inter|Napoli|Roma|Lazio|Dortmund|Leipzig|Ajax|Porto|Benfica|Celtic|Rangers|Sevilla|Valencia|Sociedad|Bilbao|Villarreal|Betis|Atletico|Atleti)\b',
                             r'\b(?:Manchester United|United|Man United|Man Utd|Man U|MUFC)\b',
                             r'\b(?:Atletico Madrid|Atletico|Atleti)\b',
                             r'\b(?:Real Sociedad|Sociedad)\b',

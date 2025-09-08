@@ -6,6 +6,7 @@ API_FOOTBALL_IDS = {
     "barcelona": 529,
     "atletico madrid": 530,
     "manchester city": 50,
+    "man city": 50,
     "manchester united": 33,
     "liverpool": 40,
     "chelsea": 49,
