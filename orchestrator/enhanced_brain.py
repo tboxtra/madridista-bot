@@ -185,8 +185,8 @@ class EnhancedFootballBrain:
                 )
                 
                 try:
-                    # Execute the tool
-                    result = tool_func(**tool_parameters)
+                    # Execute the tool (tools expect args dictionary)
+                    result = tool_func(tool_parameters)
                     
                     if result and result != "No data found":
                         tool_results.append({
