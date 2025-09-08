@@ -572,6 +572,15 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                     args = {}
                     if tool_name == "tool_history_lookup":
                         args["query"] = text
+                    elif tool_name == "tool_news_top":
+                        # Extract team name from query for news filtering
+                        if "madrid" in text.lower():
+                            args["query"] = "Real Madrid"
+                        elif "barcelona" in text.lower() or "barca" in text.lower():
+                            args["query"] = "Barcelona"
+                        elif "man city" in text.lower() or "manchester city" in text.lower():
+                            args["query"] = "Manchester City"
+                        # Add more team-specific news filtering as needed
                     
                     # Run the tool
                     fn = NAME_TO_FUNC.get(tool_name)
@@ -592,8 +601,15 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                                 print(f"[brain] Tool {tool_name} failed: {tool_e}")
                             continue  # Try next tool
                 
-                # If no tools worked, return a more specific message
-                return "I couldn't find specific match data for that query. The teams may not have played recently or the data may not be available."
+                # If no tools worked, return a more specific message based on query type
+                if any(word in text.lower() for word in ["news", "headline", "rumor", "transfer", "breaking"]):
+                    return "I couldn't fetch the latest news right now. The news service may be temporarily unavailable."
+                elif any(word in text.lower() for word in ["last", "previous", "most recent", "result", "score", "beat", "defeated", "won"]):
+                    return "I couldn't find specific match data for that query. The teams may not have played recently or the data may not be available."
+                elif any(word in text.lower() for word in ["next", "upcoming", "fixture", "play next", "schedule"]):
+                    return "I couldn't find upcoming fixture information right now. The fixture service may be temporarily unavailable."
+                else:
+                    return "I couldn't find the information you're looking for right now. The data services may be temporarily unavailable."
             except Exception as arbiter_e:
                 if LOG_TOOL_CALLS:
                     print(f"[brain] Arbiter cascade also failed: {arbiter_e}")
