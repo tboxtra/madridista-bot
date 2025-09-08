@@ -144,13 +144,13 @@ class EnhancedFootballBrain:
             # Step 1: Get user context and conversation history
             user_context = self.memory.get_user_context(user_id)
             recent_context = self.memory.get_recent_context(user_id)
-            user_preferences = self.memory.get_user_preferences(user_id)
+            user_context = self.memory.get_user_context(user_id)
             
             # Step 2: Multi-step reasoning pipeline
             reasoning_result = self.reasoning_pipeline.run_pipeline(query, {
                 "user_context": user_context.__dict__,
                 "recent_context": recent_context,
-                "user_preferences": user_preferences
+                "user_context": user_context
             })
             
             intent = reasoning_result["intent"]
@@ -163,7 +163,7 @@ class EnhancedFootballBrain:
                 intent.output_data.get("intent", "general"),
                 entities.output_data.get("entities", []),
                 recent_context,
-                user_preferences
+                user_context
             )
             
             selected_tools = self.tool_selector.select_best_tools(tool_scores, max_tools=3)
@@ -205,7 +205,7 @@ class EnhancedFootballBrain:
                     })
                     
                     fallback_plan = self.fallback_system.create_fallback_plan(
-                        failure, query, entities.output_data.get("entities", []), user_preferences
+                        failure, query, entities.output_data.get("entities", []), user_context
                     )
                     
                     fallback_result = self.fallback_system.execute_fallback_plan(
@@ -223,7 +223,7 @@ class EnhancedFootballBrain:
             
             # Step 5: Generate contextual insights
             contextual_insights = self.proactive_system.generate_contextual_insights(
-                query, entities.output_data.get("entities", []), user_preferences, tool_results
+                query, entities.output_data.get("entities", []), user_context, tool_results
             )
             
             # Step 6: Synthesize response
@@ -236,7 +236,7 @@ class EnhancedFootballBrain:
             
             # Step 7: Generate proactive suggestions
             suggestions = self.proactive_system.generate_suggestions(
-                query, response, entities.output_data.get("entities", []), user_preferences
+                query, response, entities.output_data.get("entities", []), user_context
             )
             
             # Step 8: Update memory
@@ -308,13 +308,13 @@ class EnhancedFootballBrain:
     def get_user_insights(self, user_id: str) -> Dict[str, Any]:
         """Get insights about a user's interaction patterns."""
         
-        user_preferences = self.memory.get_user_preferences(user_id)
+        user_context = self.memory.get_user_context(user_id)
         conversation_insights = self.memory.get_conversation_insights()
         suggestion_insights = self.proactive_system.get_suggestion_insights()
         failure_insights = self.fallback_system.get_failure_insights()
         
         return {
-            "user_preferences": user_preferences,
+            "user_context": user_context,
             "conversation_insights": conversation_insights,
             "suggestion_insights": suggestion_insights,
             "failure_insights": failure_insights
