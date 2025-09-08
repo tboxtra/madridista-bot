@@ -111,9 +111,9 @@ def test_enhanced_ai_system():
         # Get user insights
         user_insights = brain.get_user_insights("test_user_1")
         print("✅ User insights retrieved:")
-        print(f"   - Total queries: {user_insights['user_preferences'].get('total_queries', 0)}")
-        print(f"   - Favorite teams: {user_insights['user_preferences'].get('favorite_teams', [])}")
-        print(f"   - Engagement level: {user_insights['user_preferences'].get('engagement_level', 'unknown')}")
+        print(f"   - Total queries: {user_insights.get('total_queries', 0)}")
+        print(f"   - Favorite teams: {user_insights.get('favorite_teams', [])}")
+        print(f"   - Engagement level: {user_insights.get('engagement_level', 'unknown')}")
         
         # Get conversation insights
         conv_insights = user_insights['conversation_insights']
