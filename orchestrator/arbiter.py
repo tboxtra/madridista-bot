@@ -39,12 +39,23 @@ def _looks_history(q: str) -> bool:
 
 def _looks_players(q: str) -> bool:
     ql = (q or "").lower()
-    return any(w in ql for w in ["player","stats","per 90","goals","assists","rating"])
+    # Check for player-related keywords
+    player_keywords = ["player","stats","per 90","goals","assists","rating","scored","scoring","goal"]
+    if any(w in ql for w in player_keywords):
+        return True
+    
+    # Check for common player names
+    player_names = ["vinicius","bellingham","benzema","modric","kroos","rodrygo","valverde","militao","rudiger","alaba","carvajal","courtois","mbappe","haaland","messi","ronaldo","neymar","salah","kane","lewandowski","gavi","pedri","fati","dembele","araújo","ter stegen","kounde","leao","osimhen","kvaratskhelia","de bruyne","foden","grealish","ruben dias","ederson","saka","odegaard","rice","saliba","ramsdale","rashford","fernandes","casemiro","varane","onana","son","maddison","van dijk","allison","griezmann","morata","oblack","koke","musiala","wirtz","sané","kimmich","neuer","muller","upamecano","davies","hakimi","marquinhos","donnarumma","vlahovic","chiesa","locatelli","bremer","szczesny","rafael leao","theo hernandez","giroud","maignan","di lorenzo","meret","barella","lautaro martinez","dimarco","bastoni","sommer","guler","arda guler","franco","fran garcia","brahim","brahim diaz","joselu","kepa","lunin","ceballos","nacho","lucas vazquez","odriozola","vallejo","mariano","hazard","asensio","isco","marcelo","ramos","kovacic","llorente","reguilon","achraf hakimi","borja mayoral","mariano diaz","takefusa kubo","reinier","jovic"]
+    
+    return any(name in ql for name in player_names)
 
 def _looks_compare(q: str) -> bool:
     ql = (q or "").lower()
+    # Don't match player queries
+    if _looks_players(q):
+        return False
     # Match H2H queries, team comparisons, and specific match result queries
-    return any(w in ql for w in ["compare","vs","versus","h2h","head to head","last score between","last result between","beat","defeated","won against","when","between","happened when"])
+    return any(w in ql for w in ["compare","vs","versus","h2h","head to head","last score between","last result between","beat","defeated","won against","between","happened when"])
 
 def plan_tools(user_q: str) -> List[str]:
     """
@@ -60,9 +71,9 @@ def plan_tools(user_q: str) -> List[str]:
     # Priority 2: Other intents
     elif _looks_live(user_q):           plan += ["tool_live_now", "tool_af_last_result"]
     elif _looks_next(user_q):           plan += ["tool_af_next_fixture", "tool_next_fixture"]
+    elif _looks_players(user_q):        plan += ["tool_player_stats", "tool_compare_players"]
     elif _looks_last(user_q):           plan += ["tool_af_last_result", "tool_last_result"]
     elif _looks_news(user_q):           plan += ["tool_news_top"]
-    elif _looks_players(user_q):        plan += ["tool_player_stats", "tool_compare_players"]
     elif _looks_compare(user_q):        plan += ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_h2h_summary", "tool_compare_teams"]
     elif _looks_history(user_q):        plan += ["tool_history_lookup"]
     

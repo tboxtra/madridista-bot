@@ -581,6 +581,15 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                         elif "man city" in text.lower() or "manchester city" in text.lower():
                             args["query"] = "Manchester City"
                         # Add more team-specific news filtering as needed
+                    elif tool_name == "tool_player_stats":
+                        # Extract player name from query
+                        import re
+                        player_names = ["vinicius","bellingham","benzema","modric","kroos","rodrygo","valverde","militao","rudiger","alaba","carvajal","courtois","mbappe","haaland","messi","ronaldo","neymar","salah","kane","lewandowski","gavi","pedri","fati","dembele","araújo","ter stegen","kounde","leao","osimhen","kvaratskhelia","de bruyne","foden","grealish","ruben dias","ederson","saka","odegaard","rice","saliba","ramsdale","rashford","fernandes","casemiro","varane","onana","son","maddison","van dijk","allison","griezmann","morata","oblack","koke","musiala","wirtz","sané","kimmich","neuer","muller","upamecano","davies","hakimi","marquinhos","donnarumma","vlahovic","chiesa","locatelli","bremer","szczesny","rafael leao","theo hernandez","giroud","maignan","di lorenzo","meret","barella","lautaro martinez","dimarco","bastoni","sommer","guler","arda guler","franco","fran garcia","brahim","brahim diaz","joselu","kepa","lunin","ceballos","nacho","lucas vazquez","odriozola","vallejo","mariano","hazard","asensio","isco","marcelo","ramos","kovacic","llorente","reguilon","achraf hakimi","borja mayoral","mariano diaz","takefusa kubo","reinier","jovic"]
+                        
+                        for name in player_names:
+                            if name in text.lower():
+                                args["player_name"] = name
+                                break
                     
                     # Run the tool
                     fn = NAME_TO_FUNC.get(tool_name)
