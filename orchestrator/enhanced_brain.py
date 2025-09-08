@@ -153,15 +153,15 @@ class EnhancedFootballBrain:
                 "user_preferences": user_preferences
             })
             
-            intent = reasoning_result["intent"].output_data
-            entities = reasoning_result["entities"].output_data
-            tool_plan = reasoning_result["tool_plan"].output_data
-            parameters = reasoning_result["parameters"].output_data
+            intent = reasoning_result["intent"]
+            entities = reasoning_result["entities"]
+            tool_plan = reasoning_result["tool_plan"]
+            parameters = reasoning_result["parameters"]
             
             # Step 3: Dynamic tool selection and execution
             tool_scores = self.tool_selector.score_tools(
-                intent.get("intent", "general"),
-                entities.get("entities", []),
+                intent.output_data.get("intent", "general"),
+                entities.output_data.get("entities", []),
                 recent_context,
                 user_preferences
             )
@@ -179,12 +179,12 @@ class EnhancedFootballBrain:
                 if not tool_func:
                     continue
                 
+                # Generate parameters for the tool
+                tool_parameters = self.tool_selector.generate_tool_parameters(
+                    tool_name, entities.output_data.get("entities", []), recent_context
+                )
+                
                 try:
-                    # Generate parameters for the tool
-                    tool_parameters = self.tool_selector.generate_parameters(
-                        tool_name, entities.get("entities", []), recent_context
-                    )
-                    
                     # Execute the tool
                     result = tool_func(**tool_parameters)
                     
@@ -201,15 +201,15 @@ class EnhancedFootballBrain:
                     failure = self.fallback_system.analyze_failure(tool_name, e, {
                         "original_parameters": tool_parameters,
                         "query": query,
-                        "entities": entities
+                        "entities": entities.output_data
                     })
                     
                     fallback_plan = self.fallback_system.create_fallback_plan(
-                        failure, query, entities.get("entities", []), user_preferences
+                        failure, query, entities.output_data.get("entities", []), user_preferences
                     )
                     
                     fallback_result = self.fallback_system.execute_fallback_plan(
-                        fallback_plan, failure, query, entities.get("entities", []), self.tool_functions
+                        fallback_plan, failure, query, entities.output_data.get("entities", []), self.tool_functions
                     )
                     
                     if fallback_result.get("success"):
@@ -223,7 +223,7 @@ class EnhancedFootballBrain:
             
             # Step 5: Generate contextual insights
             contextual_insights = self.proactive_system.generate_contextual_insights(
-                query, entities.get("entities", []), user_preferences, tool_results
+                query, entities.output_data.get("entities", []), user_preferences, tool_results
             )
             
             # Step 6: Synthesize response
@@ -236,7 +236,7 @@ class EnhancedFootballBrain:
             
             # Step 7: Generate proactive suggestions
             suggestions = self.proactive_system.generate_suggestions(
-                query, response, entities.get("entities", []), user_preferences
+                query, response, entities.output_data.get("entities", []), user_preferences
             )
             
             # Step 8: Update memory
@@ -244,8 +244,8 @@ class EnhancedFootballBrain:
                 user_id=user_id,
                 query=query,
                 response=response,
-                intent=intent.get("intent", "general"),
-                entities=entities.get("entities", []),
+                intent=intent.output_data.get("intent", "general"),
+                entities=entities.output_data.get("entities", []),
                 tools_used=successful_tools
             )
             
@@ -272,8 +272,8 @@ class EnhancedFootballBrain:
                 "metadata": {
                     "processing_time": time.time() - start_time,
                     "tools_used": successful_tools,
-                    "intent": intent.get("intent", "general"),
-                    "entities": entities.get("entities", []),
+                    "intent": intent.output_data.get("intent", "general"),
+                    "entities": entities.output_data.get("entities", []),
                     "reasoning_steps": len(reasoning_result["reasoning_steps"]),
                     "fallbacks_used": any(r.get("fallback_used", False) for r in tool_results)
                 }
@@ -296,6 +296,10 @@ class EnhancedFootballBrain:
                 "contextual_insights": [],
                 "metadata": {
                     "processing_time": time.time() - start_time,
+                    "tools_used": [],
+                    "intent": "unknown",
+                    "entities": [],
+                    "reasoning_steps": 0,
                     "error": str(e),
                     "fallback_used": True
                 }
