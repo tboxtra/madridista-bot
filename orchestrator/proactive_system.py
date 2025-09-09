@@ -58,39 +58,24 @@ class ProactiveSuggestionSystem:
         # Suggestion templates and patterns
         self.suggestion_templates = {
             "team_focus": [
-                "What's {team}'s next fixture?",
-                "How is {team} performing recently?",
-                "Any news about {team}?",
-                "What's {team}'s current form?",
-                "How many goals has {team} scored this season?"
+                "{team} next match",
+                "{team} recent form"
             ],
             "player_focus": [
-                "What are {player}'s current season stats?",
-                "How is {player} performing recently?",
-                "Any news about {player}?",
-                "Compare {player} with other players",
-                "What's {player}'s market value?"
+                "{player} stats",
+                "Compare {player}"
             ],
             "match_focus": [
-                "What's the head-to-head record?",
-                "How have both teams been performing?",
-                "When do they play next?",
-                "What are the odds for this match?",
-                "Who are the key players to watch?"
+                "Head-to-head record",
+                "Match prediction"
             ],
             "comparison_focus": [
-                "How do they compare this season?",
-                "What's their recent form comparison?",
-                "Who has the better squad?",
-                "What are their transfer values?",
-                "How do their managers compare?"
+                "Season comparison",
+                "Recent form"
             ],
             "news_focus": [
-                "What's the latest transfer news?",
-                "Any injury updates?",
-                "What are the latest rumors?",
-                "Any contract renewals?",
-                "What's the latest match analysis?"
+                "Latest news",
+                "Transfer updates"
             ]
         }
         
@@ -145,7 +130,7 @@ class ProactiveSuggestionSystem:
         # Filter and rank suggestions
         filtered_suggestions = self._filter_and_rank_suggestions(suggestions, user_context)
         
-        return filtered_suggestions[:5]  # Return top 5 suggestions
+        return filtered_suggestions[:2]  # Return top 2 suggestions only
     
     def generate_contextual_insights(self, query: str, entities: List[Dict],
                                    user_context: Dict, tool_results: List[Dict] = None) -> List[ContextualInsight]:

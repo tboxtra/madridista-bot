@@ -302,7 +302,7 @@ class EnhancedPersonalizationEngine:
         if user_insights.personality_traits.get("competitive", 0) > 0.7:
             suggestions.append("🏆 League standings and title race analysis")
         
-        return suggestions[:5]  # Return top 5 suggestions
+        return suggestions[:2]  # Return top 2 suggestions only
     
     def _get_peak_hours(self, query_times: List[int]) -> List[int]:
         """Get peak query hours."""

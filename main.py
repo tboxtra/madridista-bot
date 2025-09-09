@@ -327,10 +327,11 @@ async def text_router(update, context):
             response = result['response']
             await update.message.reply_text(response, disable_web_page_preview=False, reply_to_message_id=update.message.message_id if is_group else None)
             
-            # Send suggestions if available
-            if result['suggestions'] and len(result['suggestions']) > 0:
+            # Send suggestions if available (only for complex queries)
+            if (result.get('suggestions') and len(result['suggestions']) > 0 and 
+                len(text) > 50 and any(keyword in text.lower() for keyword in ['compare', 'analysis', 'detailed', 'comprehensive'])):
                 suggestions_text = "💡 **Related topics:**\n" + "\n".join([
-                    f"• {s['action']}" for s in result['suggestions'][:3]
+                    f"• {s.get('action', s.get('message', str(s)))}" for s in result['suggestions'][:2]
                 ])
                 await update.message.reply_text(suggestions_text)
             
