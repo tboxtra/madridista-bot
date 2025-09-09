@@ -26,6 +26,7 @@ from utils.cooldown import can_speak, mark_spoken
 from utils.user_manager import UserManager
 from utils.api_manager import APIManager
 from features.telegram_interactive import TelegramInteractiveHandler
+from features.realtime_updates import RealTimeUpdateSystem
 
 # Environment variables
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -44,16 +45,19 @@ try:
     user_manager = UserManager()
     api_manager = APIManager()
     interactive_handler = TelegramInteractiveHandler()
+    realtime_system = RealTimeUpdateSystem(api_manager)
     print("✅ Enhanced AI brain initialized successfully")
     print("✅ User management system initialized")
     print("✅ API manager initialized")
     print("✅ Interactive features initialized")
+    print("✅ Real-time update system initialized")
 except Exception as e:
     print(f"❌ Failed to initialize enhanced systems: {e}")
     enhanced_brain = None
     user_manager = None
     api_manager = None
     interactive_handler = None
+    realtime_system = None
 
 async def _remember(update, role="user"):
     chat = update.effective_chat
@@ -388,13 +392,23 @@ def main():
     print("🤖 Features enabled:")
     print("   • Multi-step reasoning")
     print("   • Context-aware memory")
-    print("   • Dynamic tool selection (43 tools)")
+    print("   • Dynamic tool selection (49 tools)")
     print("   • Intelligent fallbacks")
     print("   • Proactive suggestions")
     print("   • Weather integration")
     print("   • Enhanced news with sentiment analysis")
     print("   • Currency conversions & market analysis")
     print("   • Performance optimization with caching")
+    print("   • Interactive polls and quizzes")
+    print("   • Real-time updates and notifications")
+    print("   • Advanced personalization")
+    print("   • Complex query processing")
+    
+    # Start real-time system if available
+    if realtime_system:
+        import asyncio
+        asyncio.create_task(realtime_system.start())
+        print("✅ Real-time update system started")
     
     # Start the bot
     app.run_polling(drop_pending_updates=True)

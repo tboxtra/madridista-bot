@@ -20,8 +20,11 @@ from . import tools
 from . import tools_ext
 from . import tools_history
 from . import tools_enhanced
+from . import tools_enhanced_v2
 from . import tools_phase1
 from . import arbiter
+from .query_processor import AdvancedQueryProcessor
+from .personalization_v2 import EnhancedPersonalizationEngine
 
 class EnhancedFootballBrain:
     """Enhanced AI brain with advanced reasoning capabilities."""
@@ -35,6 +38,8 @@ class EnhancedFootballBrain:
         self.tool_selector = DynamicToolSelector(openai_client)
         self.fallback_system = IntelligentFallbackSystem(openai_client)
         self.proactive_system = ProactiveSuggestionSystem(openai_client)
+        self.query_processor = AdvancedQueryProcessor(openai_client)
+        self.personalization_engine = EnhancedPersonalizationEngine(openai_client)
         
         # Tool registry (only tools that actually exist)
         self.tool_functions = {
@@ -88,6 +93,14 @@ class EnhancedFootballBrain:
             "tool_currency_impact": tools_enhanced.tool_currency_impact,
             "tool_cache_stats": tools_enhanced.tool_cache_stats,
             "tool_clear_cache": tools_enhanced.tool_clear_cache,
+            
+            # Enhanced Tools V2 - API Manager Integration
+            "tool_weather_match_enhanced": tools_enhanced_v2.tool_weather_match_enhanced,
+            "tool_news_enhanced": tools_enhanced_v2.tool_news_enhanced,
+            "tool_currency_enhanced": tools_enhanced_v2.tool_currency_enhanced,
+            "tool_user_achievements_enhanced": tools_enhanced_v2.tool_user_achievements_enhanced,
+            "tool_user_insights_enhanced": tools_enhanced_v2.tool_user_insights_enhanced,
+            "tool_api_status": tools_enhanced_v2.tool_api_status,
             
             # Phase 1 Tools - AI Predictions, Personalization, Interactive Features, Achievements
             "tool_predict_match_outcome": tools_phase1.tool_predict_match_outcome,
