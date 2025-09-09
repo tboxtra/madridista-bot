@@ -27,11 +27,19 @@ The Enhanced AI Football Bot is now a world-class AI agent with advanced feature
 # Core API Keys
 OPENAI_API_KEY=your_openai_api_key
 TELEGRAM_BOT_TOKEN=your_telegram_token
+FOOTBALL_DATA_API_KEY=your_football_data_api_key
+TZ=UTC
 
 # Enhanced Features (Optional - Free APIs)
 OPENWEATHER_API_KEY=your_openweather_api_key
 NEWS_API_KEY=your_news_api_key
 EXCHANGE_RATE_API_KEY=your_exchange_rate_api_key
+
+# Additional APIs (Optional)
+API_FOOTBALL_KEY=your_api_football_key
+RAPIDAPI_KEY=your_rapidapi_key
+SOFA_USER_AGENT=Mozilla/5.0 (compatible; Bot/1.0)
+SOFA_TEAM_ID=2817
 ```
 
 ### **Optional Configuration**
