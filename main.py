@@ -41,8 +41,9 @@ if not OPENAI_API_KEY:
 # Initialize the enhanced brain and systems
 try:
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
-    enhanced_brain = EnhancedFootballBrain(openai_client)
-    print("✅ Enhanced AI brain initialized successfully")
+    # Temporarily disable enhanced brain due to synthesis issues
+    enhanced_brain = None
+    print("⚠️ Enhanced AI brain temporarily disabled - using regular brain")
 except Exception as e:
     print(f"❌ Failed to initialize enhanced brain: {e}")
     enhanced_brain = None
