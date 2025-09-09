@@ -23,6 +23,9 @@ from orchestrator.tools import (
 from utils.memory import mem_for, export_context
 from utils.relevance import classify_relevance
 from utils.cooldown import can_speak, mark_spoken
+from utils.user_manager import UserManager
+from utils.api_manager import APIManager
+from features.telegram_interactive import TelegramInteractiveHandler
 
 # Environment variables
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -34,14 +37,23 @@ if not TOKEN:
 if not OPENAI_API_KEY:
     raise RuntimeError("Missing OPENAI_API_KEY")
 
-# Initialize the enhanced brain
+# Initialize the enhanced brain and systems
 try:
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
     enhanced_brain = EnhancedFootballBrain(openai_client)
+    user_manager = UserManager()
+    api_manager = APIManager()
+    interactive_handler = TelegramInteractiveHandler()
     print("✅ Enhanced AI brain initialized successfully")
+    print("✅ User management system initialized")
+    print("✅ API manager initialized")
+    print("✅ Interactive features initialized")
 except Exception as e:
-    print(f"❌ Failed to initialize enhanced brain: {e}")
+    print(f"❌ Failed to initialize enhanced systems: {e}")
     enhanced_brain = None
+    user_manager = None
+    api_manager = None
+    interactive_handler = None
 
 async def _remember(update, role="user"):
     chat = update.effective_chat
@@ -190,13 +202,22 @@ async def cmd_predict(update, context):
     mem_for(update.effective_chat.id).add(role="assistant", text=sent_text, user_id=0, username="bot")
 
 async def text_router(update, context):
-    """Enhanced text router with AI-first processing."""
+    """Enhanced text router with AI-first processing and all new features."""
     if not update.message or not update.message.text:
         return
     
     text = update.message.text.strip()
     user_id = str(update.effective_user.id)
     chat_id = update.effective_chat.id
+    
+    # Get or create user profile
+    if user_manager:
+        user_profile = user_manager.get_or_create_user(
+            user_id=user_id,
+            username=update.effective_user.username or "",
+            first_name=update.effective_user.first_name or "",
+            last_name=update.effective_user.last_name or ""
+        )
     
     # Remember the user message
     await _remember(update, role="user")
@@ -214,6 +235,41 @@ async def text_router(update, context):
         
         mark_spoken(chat_id)
     
+    # Check for interactive feature requests
+    if interactive_handler:
+        if "create a poll" in text.lower() or "poll" in text.lower():
+            # Extract match data from text
+            match_data = {"home_team": "Real Madrid", "away_team": "Barcelona", "match_id": f"poll_{chat_id}"}
+            result = await interactive_handler.create_match_prediction_poll(update, context, match_data)
+            if result.get("ok"):
+                return
+        
+        elif "quiz" in text.lower() or "trivia" in text.lower():
+            result = await interactive_handler.create_quiz_question(update, context)
+            if result.get("ok"):
+                return
+        
+        elif "compare" in text.lower() and ("team" in text.lower() or "vs" in text.lower()):
+            # Extract teams from text
+            teams = ["Real Madrid", "Barcelona"]  # Default
+            result = await interactive_handler.create_team_comparison_poll(update, context, teams[0], teams[1])
+            if result.get("ok"):
+                return
+    
+    # Check for achievement requests
+    if "achievements" in text.lower() or "stats" in text.lower():
+        if user_manager:
+            achievements = user_manager.get_user_achievements(user_id)
+            if achievements.get("ok"):
+                response = f"🏆 **Your Achievements & Stats**\n\n"
+                response += f"**Earned Achievements:** {len(achievements['earned_achievements'])}\n"
+                response += f"**Total Queries:** {achievements['user_stats']['total_queries']}\n"
+                response += f"**Prediction Accuracy:** {achievements['user_stats']['accurate_predictions']}\n"
+                response += f"**Quiz Score:** {achievements['user_stats']['quiz_accuracy']:.1f}%\n"
+                response += f"**Favorite Teams:** {', '.join(achievements['user_stats']['favorite_teams'])}\n"
+                await update.message.reply_text(response, parse_mode='Markdown')
+                return
+    
     # Process with enhanced AI brain
     if enhanced_brain:
         try:
@@ -224,7 +280,8 @@ async def text_router(update, context):
                 "recent_messages": [],
                 "chat_type": update.effective_chat.type,
                 "user_username": update.effective_user.username,
-                "conversation_summary": ctx.get("summary", "")
+                "conversation_summary": ctx.get("summary", ""),
+                "user_profile": user_profile.__dict__ if user_manager else {}
             }
             
             # Process with enhanced brain
@@ -233,6 +290,14 @@ async def text_router(update, context):
                 user_id=user_id,
                 context=conversation_context
             )
+            
+            # Update user activity
+            if user_manager:
+                user_manager.update_user_activity(user_id, "query", {
+                    "intent": result.get("intent", "general"),
+                    "mentioned_teams": result.get("mentioned_teams", []),
+                    "mentioned_players": result.get("mentioned_players", [])
+                })
             
             # Send main response
             response = result['response']
@@ -313,6 +378,11 @@ def main():
     
     # Add message handler
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), text_router), group=20)
+    
+    # Add callback query handler for interactive features
+    if interactive_handler:
+        from telegram.ext import CallbackQueryHandler
+        app.add_handler(CallbackQueryHandler(interactive_handler.handle_callback_query))
     
     print("✅ Enhanced AI Football Bot ready!")
     print("🤖 Features enabled:")
