@@ -44,10 +44,16 @@ def _looks_players(q: str) -> bool:
     if any(w in ql for w in player_keywords):
         return True
     
-    # Check for common player names
-    player_names = ["vinicius","bellingham","benzema","modric","kroos","rodrygo","valverde","militao","rudiger","alaba","carvajal","courtois","mbappe","haaland","messi","ronaldo","neymar","salah","kane","lewandowski","gavi","pedri","fati","dembele","araújo","ter stegen","kounde","leao","osimhen","kvaratskhelia","de bruyne","foden","grealish","ruben dias","ederson","saka","odegaard","rice","saliba","ramsdale","rashford","fernandes","casemiro","varane","onana","son","maddison","van dijk","allison","griezmann","morata","oblack","koke","musiala","wirtz","sané","kimmich","neuer","muller","upamecano","davies","hakimi","marquinhos","donnarumma","vlahovic","chiesa","locatelli","bremer","szczesny","rafael leao","theo hernandez","giroud","maignan","di lorenzo","meret","barella","lautaro martinez","dimarco","bastoni","sommer","guler","arda guler","franco","fran garcia","brahim","brahim diaz","joselu","kepa","lunin","ceballos","nacho","lucas vazquez","odriozola","vallejo","mariano","hazard","asensio","isco","marcelo","ramos","kovacic","llorente","reguilon","achraf hakimi","borja mayoral","mariano diaz","takefusa kubo","reinier","jovic"]
+    # Check for common player names (with word boundaries to avoid false positives)
+    player_names = ["vinicius","bellingham","benzema","modric","kroos","rodrygo","valverde","militao","rudiger","alaba","carvajal","courtois","mbappe","haaland","messi","ronaldo","neymar","salah","kane","lewandowski","gavi","pedri","fati","dembele","araújo","ter stegen","kounde","leao","osimhen","kvaratskhelia","de bruyne","foden","grealish","ruben dias","ederson","saka","odegaard","rice","saliba","ramsdale","rashford","fernandes","casemiro","varane","onana","son heung-min","son","maddison","van dijk","allison","griezmann","morata","oblack","koke","musiala","wirtz","sané","kimmich","neuer","muller","upamecano","davies","hakimi","marquinhos","donnarumma","vlahovic","chiesa","locatelli","bremer","szczesny","rafael leao","theo hernandez","giroud","maignan","di lorenzo","meret","barella","lautaro martinez","dimarco","bastoni","sommer","guler","arda guler","franco","fran garcia","brahim","brahim diaz","joselu","kepa","lunin","ceballos","nacho","lucas vazquez","odriozola","vallejo","mariano","hazard","asensio","isco","marcelo","ramos","kovacic","llorente","reguilon","achraf hakimi","borja mayoral","mariano diaz","takefusa kubo","reinier","jovic"]
     
-    return any(name in ql for name in player_names)
+    # Use word boundaries to avoid false positives like "son" in "season"
+    import re
+    for name in player_names:
+        if re.search(r'\b' + re.escape(name) + r'\b', ql):
+            return True
+    
+    return False
 
 def _looks_compare(q: str) -> bool:
     ql = (q or "").lower()
@@ -68,14 +74,14 @@ def plan_tools(user_q: str) -> List[str]:
     if _looks_compare(user_q) and any(w in user_q.lower() for w in ["happened when", "beat", "defeated", "won against", "when did", "defeat"]):
         plan += ["tool_af_find_match_result", "tool_af_last_result_vs", "tool_h2h_officialish", "tool_h2h_summary", "tool_compare_teams"]
     
-    # Priority 2: Other intents
-    elif _looks_live(user_q):           plan += ["tool_live_now", "tool_af_last_result"]
-    elif _looks_next(user_q):           plan += ["tool_af_next_fixture", "tool_next_fixture"]
-    elif _looks_players(user_q):        plan += ["tool_player_stats", "tool_compare_players"]
-    elif _looks_last(user_q):           plan += ["tool_af_last_result", "tool_last_result"]
-    elif _looks_news(user_q):           plan += ["tool_news_top"]
-    elif _looks_compare(user_q):        plan += ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_h2h_summary", "tool_compare_teams"]
-    elif _looks_history(user_q):        plan += ["tool_history_lookup"]
+    # Priority 2: Other intents (handle multiple intents for complex queries)
+    if _looks_live(user_q):           plan += ["tool_live_now", "tool_af_last_result"]
+    if _looks_next(user_q):           plan += ["tool_af_next_fixture", "tool_next_fixture"]
+    if _looks_players(user_q):        plan += ["tool_player_stats", "tool_compare_players"]
+    if _looks_last(user_q):           plan += ["tool_af_last_result", "tool_last_result"]
+    if _looks_news(user_q):           plan += ["tool_news_top"]
+    if _looks_compare(user_q):        plan += ["tool_af_last_result_vs", "tool_h2h_officialish", "tool_h2h_summary", "tool_compare_teams"]
+    if _looks_history(user_q):        plan += ["tool_history_lookup"]
     
     # Always add general fallbacks at the end:
     plan += ["tool_sofa_form", "tool_table", "tool_history_lookup"]
