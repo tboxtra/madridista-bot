@@ -42,21 +42,41 @@ if not OPENAI_API_KEY:
 try:
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
     enhanced_brain = EnhancedFootballBrain(openai_client)
-    user_manager = UserManager()
-    api_manager = APIManager()
-    interactive_handler = TelegramInteractiveHandler()
-    realtime_system = RealTimeUpdateSystem(api_manager)
     print("✅ Enhanced AI brain initialized successfully")
-    print("✅ User management system initialized")
-    print("✅ API manager initialized")
-    print("✅ Interactive features initialized")
-    print("✅ Real-time update system initialized")
 except Exception as e:
-    print(f"❌ Failed to initialize enhanced systems: {e}")
+    print(f"❌ Failed to initialize enhanced brain: {e}")
     enhanced_brain = None
+
+try:
+    user_manager = UserManager()
+    print("✅ User management system initialized")
+except Exception as e:
+    print(f"❌ Failed to initialize user manager: {e}")
     user_manager = None
+
+try:
+    api_manager = APIManager()
+    print("✅ API manager initialized")
+except Exception as e:
+    print(f"❌ Failed to initialize API manager: {e}")
     api_manager = None
+
+try:
+    interactive_handler = TelegramInteractiveHandler()
+    print("✅ Interactive features initialized")
+except Exception as e:
+    print(f"❌ Failed to initialize interactive handler: {e}")
     interactive_handler = None
+
+try:
+    if api_manager:
+        realtime_system = RealTimeUpdateSystem(api_manager)
+        print("✅ Real-time update system initialized")
+    else:
+        realtime_system = None
+        print("⚠️ Real-time system skipped (API manager not available)")
+except Exception as e:
+    print(f"❌ Failed to initialize real-time system: {e}")
     realtime_system = None
 
 async def _remember(update, role="user"):
@@ -360,12 +380,25 @@ async def text_router(update, context):
                 "I had trouble processing that request. Please try again or use specific commands like /matches, /table, or /live."
             )
 
+async def post_init(application):
+    """Post-initialization setup for async components."""
+    try:
+        if realtime_system:
+            await realtime_system.start()
+            print("✅ Real-time update system started")
+    except Exception as e:
+        print(f"⚠️ Real-time system failed to start: {e}")
+        print("Bot will continue without real-time features")
+
 def main():
     """Main application setup with enhanced features."""
     print("🚀 Starting Enhanced AI Football Bot...")
     
     # Create application
     app = Application.builder().token(TOKEN).build()
+    
+    # Add post-init handler for async components
+    app.post_init = post_init
     
     # Add command handlers
     app.add_handler(CommandHandler("start", cmd_start))
@@ -403,12 +436,6 @@ def main():
     print("   • Real-time updates and notifications")
     print("   • Advanced personalization")
     print("   • Complex query processing")
-    
-    # Start real-time system if available
-    if realtime_system:
-        import asyncio
-        asyncio.create_task(realtime_system.start())
-        print("✅ Real-time update system started")
     
     # Start the bot
     app.run_polling(drop_pending_updates=True)
