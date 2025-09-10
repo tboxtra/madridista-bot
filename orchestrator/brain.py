@@ -69,6 +69,11 @@ def _facts_from_toolpayload(payloads):
                 facts.append(f"Next match: {p['home']} vs {p['away']} on {p['when']}")
         if p.get("points_a") is not None and p.get("points_b") is not None:
             facts.append(f"Form (last {p.get('k',5)}): {p.get('team_a','A')}={p['points_a']}, {p.get('team_b','B')}={p['points_b']}")
+        if p.get("season_stats_a") and p.get("season_stats_b"):
+            # New season performance format
+            stats_a = p["season_stats_a"]
+            stats_b = p["season_stats_b"]
+            facts.append(f"Season: {p.get('team_a','A')} {stats_a['wins']}W-{stats_a['draws']}D-{stats_a['losses']}L ({stats_a['points']}pts), {p.get('team_b','B')} {stats_b['wins']}W-{stats_b['draws']}D-{stats_b['losses']}L ({stats_b['points']}pts)")
         if p.get("rows") and "pts" in p["rows"][0]:
             lead = p["rows"][0]; facts.append(f"Top of table: {lead['team']} {lead['pts']} pts")
         if p.get("items") and p["items"] and "title" in p["items"][0]:
@@ -553,6 +558,21 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                             draws = res.get("draws", 0)
                             source = res.get("__source", "")
                             return f"Head-to-head record: {team_a} has {wins_a} wins, {team_b} has {wins_b} wins, and {draws} draws. ({source})"
+                        elif tool_name == "tool_compare_teams":
+                            team_a = res.get("team_a", "Team A")
+                            team_b = res.get("team_b", "Team B")
+                            verdict = res.get("verdict", "Both teams are performing similarly")
+                            
+                            # Check if we have season stats (new format)
+                            if "season_stats_a" in res and "season_stats_b" in res:
+                                stats_a = res["season_stats_a"]
+                                stats_b = res["season_stats_b"]
+                                return f"Season Performance Comparison:\n\n{team_a}: {stats_a['wins']}W-{stats_a['draws']}D-{stats_a['losses']}L, {stats_a['points']} points, {stats_a['goals_for']}-{stats_a['goals_against']} GD\n{team_b}: {stats_b['wins']}W-{stats_b['draws']}D-{stats_b['losses']}L, {stats_b['points']} points, {stats_b['goals_for']}-{stats_b['goals_against']} GD\n\n{verdict} ({res.get('__source', '')})"
+                            else:
+                                # Fallback to old format
+                                points_a = res.get("points_a", 0)
+                                points_b = res.get("points_b", 0)
+                                return f"Recent Form Comparison:\n\n{team_a}: {points_a} points (last {res.get('k', 5)} matches)\n{team_b}: {points_b} points (last {res.get('k', 5)} matches)\n\n{verdict} ({res.get('__source', '')})"
                         else:
                             return res.get("message", "Found some data but couldn't format it properly.")
             # If still nothing & STRICT => don't guess
@@ -624,6 +644,21 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                                     draws = res.get("draws", 0)
                                     source = res.get("__source", "")
                                     return f"Head-to-head record: {team_a} has {wins_a} wins, {team_b} has {wins_b} wins, and {draws} draws. ({source})"
+                                elif tool_name == "tool_compare_teams":
+                                    team_a = res.get("team_a", "Team A")
+                                    team_b = res.get("team_b", "Team B")
+                                    verdict = res.get("verdict", "Both teams are performing similarly")
+                                    
+                                    # Check if we have season stats (new format)
+                                    if "season_stats_a" in res and "season_stats_b" in res:
+                                        stats_a = res["season_stats_a"]
+                                        stats_b = res["season_stats_b"]
+                                        return f"Season Performance Comparison:\n\n{team_a}: {stats_a['wins']}W-{stats_a['draws']}D-{stats_a['losses']}L, {stats_a['points']} points, {stats_a['goals_for']}-{stats_a['goals_against']} GD\n{team_b}: {stats_b['wins']}W-{stats_b['draws']}D-{stats_b['losses']}L, {stats_b['points']} points, {stats_b['goals_for']}-{stats_b['goals_against']} GD\n\n{verdict} ({res.get('__source', '')})"
+                                    else:
+                                        # Fallback to old format
+                                        points_a = res.get("points_a", 0)
+                                        points_b = res.get("points_b", 0)
+                                        return f"Recent Form Comparison:\n\n{team_a}: {points_a} points (last {res.get('k', 5)} matches)\n{team_b}: {points_b} points (last {res.get('k', 5)} matches)\n\n{verdict} ({res.get('__source', '')})"
                                 else:
                                     return f"Based on the data: {res.get('message', 'No specific details available')}"
                             elif res.get("ok") is False and res.get("message"):

@@ -129,63 +129,121 @@ def _is_recent_ts(ts, max_age_days: int = 120):
         return False
 
 def tool_compare_teams(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Compare two teams' recent form (last k). Uses SofaScore last events and ignores stale (>120d)."""
+    """Compare two teams' season performance (wins, losses, draws, points)."""
     a = args.get("team_a") or "Real Madrid"
     b = args.get("team_b") or "Barcelona"
-    k = int(args.get("k", 5))
-    # Use SofaScore team IDs for SofaScore API
-    ta, tb = resolve_team_sofa(a), resolve_team_sofa(b)
-
-    fa = [m for m in team_recent_form(ta, limit=max(10, k)) if _is_recent_ts(m.get("ts"))][:k]
-    fb = [m for m in team_recent_form(tb, limit=max(10, k)) if _is_recent_ts(m.get("ts"))][:k]
-
-    # Fallback to Football-Data if too thin
-    if len(fa) < max(1, k//2) or len(fb) < max(1, k//2):
-        def _fd_form(tid):
-            ms = fd_team_matches(tid, status="FINISHED", limit=max(10,k), window_days=180)
-            out = []
-            for m in ms[:k]:
-                ft = (m.get("score", {}) or {}).get("fullTime", {}) or {}
-                out.append({
-                    "home": m["homeTeam"]["name"], "away": m["awayTeam"]["name"],
-                    "home_score": ft.get("home",0), "away_score": ft.get("away",0),
-                    "ts": None
-                })
-            return out
-        # Use Football-Data team IDs for fallback
+    k = int(args.get("k", 10))  # Default to more matches for season comparison
+    
+    # Try to get season data from Football-Data first (more comprehensive)
+    try:
         ta_fd, tb_fd = resolve_team(a), resolve_team(b)
-        if len(fa) < max(1, k//2): fa = _fd_form(ta_fd)
-        if len(fb) < max(1, k//2): fb = _fd_form(tb_fd)
+        
+        # Get season matches for both teams
+        matches_a = fd_team_matches(ta_fd, status="FINISHED", limit=50, window_days=365)
+        matches_b = fd_team_matches(tb_fd, status="FINISHED", limit=50, window_days=365)
+        
+        def calculate_season_stats(matches, team_name):
+            wins = losses = draws = 0
+            goals_for = goals_against = 0
+            
+            for m in matches:
+                ft = (m.get("score", {}) or {}).get("fullTime", {}) or {}
+                hs = ft.get("home", 0)
+                as_ = ft.get("away", 0)
+                
+                # Determine if team was home or away
+                home_team = m.get("homeTeam", {}).get("name", "").lower()
+                away_team = m.get("awayTeam", {}).get("name", "").lower()
+                team_lower = team_name.lower()
+                
+                if team_lower in home_team:
+                    # Team was home
+                    goals_for += hs
+                    goals_against += as_
+                    if hs > as_:
+                        wins += 1
+                    elif hs < as_:
+                        losses += 1
+                    else:
+                        draws += 1
+                elif team_lower in away_team:
+                    # Team was away
+                    goals_for += as_
+                    goals_against += hs
+                    if as_ > hs:
+                        wins += 1
+                    elif as_ < hs:
+                        losses += 1
+                    else:
+                        draws += 1
+            
+            points = wins * 3 + draws
+            return {
+                "wins": wins, "losses": losses, "draws": draws, 
+                "points": points, "goals_for": goals_for, "goals_against": goals_against,
+                "matches_played": wins + losses + draws
+            }
+        
+        stats_a = calculate_season_stats(matches_a, a)
+        stats_b = calculate_season_stats(matches_b, b)
+        
+        # Determine better performer
+        if stats_a["points"] > stats_b["points"]:
+            verdict = f"{a} is performing better this season"
+        elif stats_b["points"] > stats_a["points"]:
+            verdict = f"{b} is performing better this season"
+        else:
+            verdict = "Both teams are performing similarly this season"
+        
+        return {
+            "ok": True,
+            "__source": CIT_FD,
+            "team_a": a, "team_b": b,
+            "season_stats_a": stats_a,
+            "season_stats_b": stats_b,
+            "verdict": verdict,
+            "comparison": {
+                "points_diff": stats_a["points"] - stats_b["points"],
+                "goals_diff_a": stats_a["goals_for"] - stats_a["goals_against"],
+                "goals_diff_b": stats_b["goals_for"] - stats_b["goals_against"]
+            }
+        }
+    
+    except Exception as e:
+        # Fallback to SofaScore recent form if Football-Data fails
+        ta, tb = resolve_team_sofa(a), resolve_team_sofa(b)
+        fa = [m for m in team_recent_form(ta, limit=max(10, k)) if _is_recent_ts(m.get("ts"))][:k]
+        fb = [m for m in team_recent_form(tb, limit=max(10, k)) if _is_recent_ts(m.get("ts"))][:k]
 
-    def pts(h, a):
-        if h > a: return 3
-        if h == a: return 1
-        return 0
+        def pts(h, a):
+            if h > a: return 3
+            if h == a: return 1
+            return 0
 
-    # naive side detection by comparing team name prefix; you can store team ids if you keep them
-    def sum_pts(arr, team_name: str):
-        s = 0
-        for m in arr:
-            home = (m["home"] or "").lower()
-            if home.startswith(team_name.lower().split()[0]):
-                s += pts(m["home_score"], m["away_score"])
-            else:
-                s += pts(m["away_score"], m["home_score"])
-        return s
+        def sum_pts(arr, team_name: str):
+            s = 0
+            for m in arr:
+                home = (m["home"] or "").lower()
+                if home.startswith(team_name.lower().split()[0]):
+                    s += pts(m["home_score"], m["away_score"])
+                else:
+                    s += pts(m["away_score"], m["home_score"])
+            return s
 
-    pa = sum_pts(fa, a)
-    pb = sum_pts(fb, b)
-    verdict = a if pa > pb + 1 else b if pb > pa + 1 else "too close to call"
+        pa = sum_pts(fa, a)
+        pb = sum_pts(fb, b)
+        verdict = a if pa > pb + 1 else b if pb > pa + 1 else "too close to call"
 
-    return {
-        "ok": True,
-        "__source": "SofaScore",
-        "k": k,
-        "team_a": a, "team_b": b,
-        "points_a": pa, "points_b": pb,
-        "verdict": verdict,
-        "form_a": fa, "form_b": fb
-    }
+        return {
+            "ok": True,
+            "__source": "SofaScore",
+            "k": k,
+            "team_a": a, "team_b": b,
+            "points_a": pa, "points_b": pb,
+            "verdict": verdict,
+            "form_a": fa, "form_b": fb,
+            "note": "Recent form data (last few matches)"
+        }
 
 def tool_h2h_summary(args: Dict[str, Any]) -> Dict[str, Any]:
     """Head-to-head summary between two teams."""

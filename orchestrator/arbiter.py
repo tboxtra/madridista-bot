@@ -63,6 +63,18 @@ def _looks_compare(q: str) -> bool:
     # Match H2H queries, team comparisons, and specific match result queries
     return any(w in ql for w in ["compare","vs","versus","h2h","head to head","last score between","last result between","beat","defeated","won against","between","happened when"])
 
+def _looks_performance(q: str) -> bool:
+    """Detect performance comparison queries (season performance, not H2H)"""
+    ql = (q or "").lower()
+    # Don't match player queries
+    if _looks_players(q):
+        return False
+    # Match performance comparison queries
+    performance_keywords = ["performance", "form", "season", "this season", "current season", "how are", "how is", "doing", "results", "record"]
+    has_performance = any(w in ql for w in performance_keywords)
+    has_compare = any(w in ql for w in ["compare", "vs", "versus", "and"])
+    return has_performance and has_compare
+
 def plan_tools(user_q: str) -> List[str]:
     """
     Return an ordered plan of tool names to try for this query.
@@ -70,11 +82,15 @@ def plan_tools(user_q: str) -> List[str]:
     """
     plan = []
     
-    # Priority 1: Specific match result queries (most specific first)
-    if _looks_compare(user_q) and any(w in user_q.lower() for w in ["happened when", "beat", "defeated", "won against", "when did", "defeat"]):
+    # Priority 1: Performance comparison queries (season performance, not H2H)
+    if _looks_performance(user_q):
+        plan += ["tool_compare_teams", "tool_sofa_form", "tool_table"]
+    
+    # Priority 2: Specific match result queries (most specific first)
+    elif _looks_compare(user_q) and any(w in user_q.lower() for w in ["happened when", "beat", "defeated", "won against", "when did", "defeat"]):
         plan += ["tool_af_find_match_result", "tool_af_last_result_vs", "tool_h2h_officialish", "tool_h2h_summary", "tool_compare_teams"]
     
-    # Priority 2: Other intents (handle multiple intents for complex queries)
+    # Priority 3: Other intents (handle multiple intents for complex queries)
     if _looks_live(user_q):           plan += ["tool_live_now", "tool_af_last_result"]
     if _looks_next(user_q):           plan += ["tool_af_next_fixture", "tool_next_fixture"]
     if _looks_players(user_q):        plan += ["tool_player_stats", "tool_compare_players"]
