@@ -16,7 +16,7 @@ def fd_team_matches(team_id: int, status: str = None, limit=20, window_days: int
     """
     Get team matches with configurable date window.
     Football-Data supports dateFrom/dateTo filtering.
-    For historical searches, use larger window_days values.
+    For current season data, use window_days=150 (covers August 2024 onwards).
     """
     today = _today_iso()
     date_from = (today - timedelta(days=window_days)).isoformat()

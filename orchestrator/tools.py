@@ -29,7 +29,7 @@ def tool_next_fixture(args: Dict[str, Any]) -> Dict[str, Any]:
 def tool_last_result(args: Dict[str, Any]) -> Dict[str, Any]:
     """Return the latest finished result for a team."""
     team_id = args.get("team_id") or resolve_team(args.get("team_name","") or "")
-    ms = fd_team_matches(team_id, status="FINISHED", limit=1, window_days=180)
+    ms = fd_team_matches(team_id, status="FINISHED", limit=1, window_days=120)
     if not ms:
         return {"ok": False, "message": "No recent match found.", "__source": CIT_FD}
     m = ms[0]; ft = (m.get("score",{}) or {}).get("fullTime",{}) or {}
@@ -58,7 +58,7 @@ def tool_form(args: Dict[str, Any]) -> Dict[str, Any]:
     """Return last N finished results for a team (default 5)."""
     team_id = args.get("team_id") or resolve_team(args.get("team_name","") or "")
     k = int(args.get("k",5))
-    ms = fd_team_matches(team_id, status="FINISHED", limit=max(10,k), window_days=180)
+    ms = fd_team_matches(team_id, status="FINISHED", limit=max(10,k), window_days=120)
     out = []
     for m in ms[:k]:
         ft = (m.get("score",{}) or {}).get("fullTime",{}) or {}
@@ -119,7 +119,7 @@ def tool_last_man_of_match(args: Dict[str, Any]) -> Dict[str, Any]:
     except Exception:
         return {"ok": False, "message": "MoM data unavailable.", "__source": CIT_SOFA}
 
-def _is_recent_ts(ts, max_age_days: int = 120):
+def _is_recent_ts(ts, max_age_days: int = 200):
     # SofaScore gives startTimestamp (seconds)
     try:
         from datetime import datetime, timezone, timedelta
@@ -138,9 +138,9 @@ def tool_compare_teams(args: Dict[str, Any]) -> Dict[str, Any]:
     try:
         ta_fd, tb_fd = resolve_team(a), resolve_team(b)
         
-        # Get season matches for both teams
-        matches_a = fd_team_matches(ta_fd, status="FINISHED", limit=50, window_days=365)
-        matches_b = fd_team_matches(tb_fd, status="FINISHED", limit=50, window_days=365)
+        # Get current season matches for both teams (from August 2024 onwards)
+        matches_a = fd_team_matches(ta_fd, status="FINISHED", limit=50, window_days=150)
+        matches_b = fd_team_matches(tb_fd, status="FINISHED", limit=50, window_days=150)
         
         def calculate_season_stats(matches, team_name):
             wins = losses = draws = 0
@@ -277,9 +277,9 @@ def tool_h2h_summary(args: Dict[str, Any]) -> Dict[str, Any]:
     try:
         ta_fd, tb_fd = resolve_team(a), resolve_team(b)
         
-        # Get recent matches for both teams
-        matches_a = fd_team_matches(ta_fd, status="FINISHED", limit=50, window_days=365)
-        matches_b = fd_team_matches(tb_fd, status="FINISHED", limit=50, window_days=365)
+        # Get recent matches for both teams (current season)
+        matches_a = fd_team_matches(ta_fd, status="FINISHED", limit=50, window_days=150)
+        matches_b = fd_team_matches(tb_fd, status="FINISHED", limit=50, window_days=150)
         
         # Find common opponents (H2H matches)
         h2h_matches = []
