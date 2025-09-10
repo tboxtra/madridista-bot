@@ -529,16 +529,32 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                 valid, why = validate_recency(text, res)
                 if ok and valid:
                     # Give this result back to the model to compose the final answer
-                    tool_msgs = [{"role":"tool","tool_call_id":"arbiter", "name":tool_name, "content": json.dumps(res)}]
-                    r2 = _get_client().chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[{"role":"system","content": SYSTEM},{"role":"user","content": text}] + tool_msgs,
-                        temperature=0.5, max_tokens=380
-                    )
-                    out = (r2.choices[0].message.content or "").strip()
-                    if CITATIONS_ON and sources:
-                        out += "\n\n(" + " • ".join(sorted(sources)) + ")"
-                    return _safe(out)
+                    try:
+                        tool_msgs = [{"role":"tool","tool_call_id":"arbiter", "name":tool_name, "content": json.dumps(res)}]
+                        r2 = _get_client().chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=[{"role":"system","content": SYSTEM},{"role":"user","content": text}] + tool_msgs,
+                            temperature=0.5, max_tokens=380
+                        )
+                        out = (r2.choices[0].message.content or "").strip()
+                        if CITATIONS_ON and sources:
+                            out += "\n\n(" + " • ".join(sorted(sources)) + ")"
+                        return _safe(out)
+                    except Exception as e:
+                        # If LLM call fails, use the tool result directly
+                        if LOG_TOOL_CALLS:
+                            print(f"[brain] LLM composition failed, using tool result directly: {e}")
+                        # Create a simple response from the tool result
+                        if tool_name == "tool_h2h_summary":
+                            team_a = res.get("team_a", "Team A")
+                            team_b = res.get("team_b", "Team B")
+                            wins_a = res.get("wins_a", 0)
+                            wins_b = res.get("wins_b", 0)
+                            draws = res.get("draws", 0)
+                            source = res.get("__source", "")
+                            return f"Head-to-head record: {team_a} has {wins_a} wins, {team_b} has {wins_b} wins, and {draws} draws. ({source})"
+                        else:
+                            return res.get("message", "Found some data but couldn't format it properly.")
             # If still nothing & STRICT => don't guess
             if STRICT_FACTS:
                 return "I can't verify that without external data. Try specifying team or timeframe."
@@ -600,7 +616,16 @@ def answer_nl_question(text: str, context_summary: str = "") -> str:
                                 print(f"[brain] Tool {tool_name} result: {res}")
                             if res.get("ok") is True and not _empty(res):
                                 # Return the tool result directly
-                                return f"Based on the data: {res.get('message', 'No specific details available')}"
+                                if tool_name == "tool_h2h_summary":
+                                    team_a = res.get("team_a", "Team A")
+                                    team_b = res.get("team_b", "Team B")
+                                    wins_a = res.get("wins_a", 0)
+                                    wins_b = res.get("wins_b", 0)
+                                    draws = res.get("draws", 0)
+                                    source = res.get("__source", "")
+                                    return f"Head-to-head record: {team_a} has {wins_a} wins, {team_b} has {wins_b} wins, and {draws} draws. ({source})"
+                                else:
+                                    return f"Based on the data: {res.get('message', 'No specific details available')}"
                             elif res.get("ok") is False and res.get("message"):
                                 # Tool returned a specific error message, log it
                                 if LOG_TOOL_CALLS:

@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Tuple, Optional
 def _is_empty(payload: Dict[str, Any]) -> bool:
     if not payload or not payload.get("ok"): return True
     # Consider "empty" when common containers are missing/empty:
-    keys = ("items","rows","events","extract","fixture_id","when","home","away")
+    keys = ("items","rows","events","extract","fixture_id","when","home","away","team_a","team_b","wins_a","wins_b","draws","sample","title","url","summary")
     return not any(k in payload and payload[k] for k in keys)
 
 def _ts_now() -> float:
